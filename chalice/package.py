@@ -3,6 +3,7 @@
 import copy
 import json
 import os
+import re
 
 from typing import Any, Optional, Dict, List, Set, Union  # noqa
 from typing import cast
@@ -282,11 +283,11 @@ class SAMTemplateGenerator(TemplateGenerator):
             'Properties': {
                 'FunctionName': {'Ref': 'APIHandler'},
                 'Action': 'lambda:InvokeFunction',
-                'Principal': 'apigateway.amazonaws.com',
+                'Principal': {'Fn::Sub': 'apigateway.${AWS::URLSuffix}'},
                 'SourceArn': {
                     'Fn::Sub': [
-                        ('arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}'
-                         ':${RestAPIId}/*'),
+                        ('arn:${AWS::Partition}:execute-api:${AWS::Region}'
+                         ':${AWS::AccountId}:${RestAPIId}/*'),
                         {'RestAPIId': {'Ref': 'RestAPI'}},
                     ]
                 },
@@ -299,11 +300,12 @@ class SAMTemplateGenerator(TemplateGenerator):
                 'Properties': {
                     'FunctionName': {'Fn::GetAtt': [auth_cfn_name, 'Arn']},
                     'Action': 'lambda:InvokeFunction',
-                    'Principal': 'apigateway.amazonaws.com',
+                    'Principal': {'Fn::Sub': 'apigateway.${AWS::URLSuffix}'},
                     'SourceArn': {
                         'Fn::Sub': [
-                            ('arn:aws:execute-api:${AWS::Region}:'
-                             '${AWS::AccountId}:${RestAPIId}/*'),
+                            ('arn:${AWS::Partition}:execute-api'
+                             ':${AWS::Region}:${AWS::AccountId}'
+                             ':${RestAPIId}/*'),
                             {'RestAPIId': {'Ref': 'RestAPI'}},
                         ]
                     },
@@ -340,7 +342,7 @@ class SAMTemplateGenerator(TemplateGenerator):
                     'https://${RestAPI}.execute-api.${AWS::Region}'
                     # The api_gateway_stage is filled in when
                     # the template is built.
-                    '.amazonaws.com/%s/'
+                    '.${AWS::URLSuffix}/%s/'
                 ) % stage_name
             }
         }
@@ -358,10 +360,11 @@ class SAMTemplateGenerator(TemplateGenerator):
                 'IntegrationUri': {
                     'Fn::Sub': [
                         (
-                            'arn:aws:apigateway:${AWS::Region}:lambda:path/'
-                            '2015-03-31/functions/arn:aws:lambda:'
-                            '${AWS::Region}:' '${AWS::AccountId}:function:'
-                            '${WebsocketHandler}/invocations'
+                            'arn:${AWS::Partition}:apigateway:${AWS::Region}'
+                            ':lambda:path/2015-03-31/functions/arn'
+                            ':${AWS::Partition}:lambda:${AWS::Region}'
+                            ':${AWS::AccountId}:function'
+                            ':${WebsocketHandler}/invocations'
                         ),
                         {'WebsocketHandler': {'Ref': websocket_handler}}
                     ],
@@ -377,10 +380,11 @@ class SAMTemplateGenerator(TemplateGenerator):
             'Properties': {
                 'FunctionName': {'Ref': websocket_handler},
                 'Action': 'lambda:InvokeFunction',
-                'Principal': 'apigateway.amazonaws.com',
+                'Principal': {'Fn::Sub': 'apigateway.${AWS::URLSuffix}'},
                 'SourceArn': {
                     'Fn::Sub': [
-                        ('arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}'
+                        ('arn:${AWS::Partition}:execute-api'
+                         ':${AWS::Region}:${AWS::AccountId}'
                          ':${WebsocketAPIId}/*'),
                         {'WebsocketAPIId': api_ref},
                     ],
@@ -512,7 +516,7 @@ class SAMTemplateGenerator(TemplateGenerator):
                     'wss://${WebsocketAPI}.execute-api.${AWS::Region}'
                     # The api_gateway_stage is filled in when
                     # the template is built.
-                    '.amazonaws.com/%s/'
+                    '.${AWS::URLSuffix}/%s/'
                 ) % stage_name
             }
         }
@@ -526,6 +530,9 @@ class SAMTemplateGenerator(TemplateGenerator):
         # type: (models.ManagedIAMRole, Dict[str, Any]) -> None
         role_cfn_name = self._register_cfn_resource_name(
             resource.resource_name)
+        resource.trust_policy['Statement'][0]['Principal']['Service'] = {
+            'Fn::Sub': 'lambda.${AWS::URLSuffix}'
+        }
         template['Resources'][role_cfn_name] = {
             'Type': 'AWS::IAM::Role',
             'Properties': {
@@ -555,12 +562,13 @@ class SAMTemplateGenerator(TemplateGenerator):
         sns_cfn_name = self._register_cfn_resource_name(
             resource.resource_name)
 
-        if resource.topic.startswith('arn:aws:sns:'):
+        if re.match(r"^arn:aws[a-z\-]*:sns:", resource.topic):
             topic_arn = resource.topic  # type: Union[str, Dict[str, str]]
         else:
             topic_arn = {
                 'Fn::Sub': (
-                    'arn:aws:sns:${AWS::Region}:${AWS::AccountId}:%s' %
+                    'arn:${AWS::Partition}:sns'
+                    ':${AWS::Region}:${AWS::AccountId}:%s' %
                     resource.topic
                 )
             }
@@ -586,7 +594,8 @@ class SAMTemplateGenerator(TemplateGenerator):
                 'Properties': {
                     'Queue': {
                         'Fn::Sub': (
-                            'arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:%s' %
+                            'arn:${AWS::Partition}:sqs:${AWS::Region}'
+                            ':${AWS::AccountId}:%s' %
                             resource.queue
                         )
                     },
@@ -625,6 +634,7 @@ class TerraformGenerator(TemplateGenerator):
             },
             'data': {
                 'aws_caller_identity': {'chalice': {}},
+                'aws_partition': {'chalice': {}},
                 'aws_region': {'chalice': {}},
                 'null_data_source': {
                     'chalice': {
@@ -649,6 +659,7 @@ class TerraformGenerator(TemplateGenerator):
     def _arnref(self, arn_template, **kw):
         # type: (str, str) -> str
         d = dict(
+            partition='${data.aws_partition.chalice.partition}',
             region='${data.aws_region.chalice.name}',
             account_id='${data.aws_caller_identity.chalice.account_id}')
         d.update(kw)
@@ -656,6 +667,10 @@ class TerraformGenerator(TemplateGenerator):
 
     def _generate_managediamrole(self, resource, template):
         # type: (models.ManagedIAMRole, Dict[str, Any]) -> None
+
+        resource.trust_policy['Statement'][0]['Principal']['Service'] = \
+            "lambda.${data.aws_partition.chalice.dns_suffix}"
+
         template['resource'].setdefault('aws_iam_role', {})[
             resource.resource_name] = {
                 'name': resource.role_name,
@@ -713,8 +728,8 @@ class TerraformGenerator(TemplateGenerator):
                 'statement_id': resource.resource_name,
                 'action': 'lambda:InvokeFunction',
                 'function_name': resource.lambda_function.function_name,
-                'principal': 's3.amazonaws.com',
-                'source_arn': 'arn:aws:s3:::%s' % resource.bucket
+                'principal': 's3.${data.aws_partition.chalice.dns_suffix}',
+                'source_arn': 'arn:*:s3:::%s' % resource.bucket
         }
 
     def _generate_sqseventsource(self, resource, template):
@@ -722,7 +737,8 @@ class TerraformGenerator(TemplateGenerator):
         template['resource'].setdefault('aws_lambda_event_source_mapping', {})[
             resource.resource_name] = {
                 'event_source_arn': self._arnref(
-                    "arn:aws:sqs:%(region)s:%(account_id)s:%(queue)s",
+                    "arn:%(partition)s:sqs:%(region)s"
+                    ":%(account_id)s:%(queue)s",
                     queue=resource.queue),
                 'batch_size': resource.batch_size,
                 'function_name': resource.lambda_function.function_name,
@@ -735,7 +751,7 @@ class TerraformGenerator(TemplateGenerator):
             topic_arn = resource.topic
         else:
             topic_arn = self._arnref(
-                'arn:aws:sns:%(region)s:%(account_id)s:%(topic)s',
+                'arn:%(partition)s:sns:%(region)s:%(account_id)s:%(topic)s',
                 topic=resource.topic)
 
         template['resource'].setdefault('aws_sns_topic_subscription', {})[
@@ -748,7 +764,7 @@ class TerraformGenerator(TemplateGenerator):
             resource.resource_name] = {
                 'function_name': resource.lambda_function.function_name,
                 'action': 'lambda:InvokeFunction',
-                'principal': 'sns.amazonaws.com',
+                'principal': 'sns.${data.aws_partition.chalice.dns_suffix}',
                 'source_arn': topic_arn
         }
 
@@ -790,7 +806,8 @@ class TerraformGenerator(TemplateGenerator):
                 resource.resource_name] = {
                     'function_name': resource.lambda_function.function_name,
                     'action': 'lambda:InvokeFunction',
-                    'principal': 'events.amazonaws.com',
+                    'principal':
+                        'events.${data.aws_partition.chalice.dns_suffix}',
                     'source_arn': "${aws_cloudwatch_event_rule.%s.arn}" % (
                         resource.resource_name)
         }
@@ -888,7 +905,8 @@ class TerraformGenerator(TemplateGenerator):
             resource.resource_name + '_invoke'] = {
                 'function_name': resource.lambda_function.function_name,
                 'action': 'lambda:InvokeFunction',
-                'principal': 'apigateway.amazonaws.com',
+                'principal':
+                    'apigateway.${data.aws_partition.chalice.dns_suffix}',
                 'source_arn':
                     "${aws_api_gateway_rest_api.%s.execution_arn}/*" % (
                         resource.resource_name)
@@ -905,7 +923,8 @@ class TerraformGenerator(TemplateGenerator):
                 auth.resource_name + '_invoke'] = {
                     'function_name': auth.function_name,
                     'action': 'lambda:InvokeFunction',
-                    'principal': 'apigateway.amazonaws.com',
+                    'principal':
+                        'apigateway.${data.aws_partition.chalice.dns_suffix}',
                     'source_arn': (
                         "${aws_api_gateway_rest_api.%s.execution_arn}" % (
                             resource.resource_name) + "/*")

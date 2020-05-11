@@ -127,10 +127,10 @@ class TestPlanManagedRole(BasePlannerTests):
         expected = models.APICall(
             method_name='create_role',
             params={'name': 'myrole',
-                    'trust_policy': {'trust': 'policy'},
+                    'trust_policy': Variable('lambda_trust_policy'),
                     'policy': {'iam': 'policy'}},
         )
-        self.assert_apicall_equals(plan[0], expected)
+        self.assert_apicall_equals(plan[4], expected)
         assert list(self.last_plan.messages.values()) == [
             'Creating IAM role: myrole\n'
         ]
@@ -148,10 +148,10 @@ class TestPlanManagedRole(BasePlannerTests):
         expected = models.APICall(
             method_name='create_role',
             params={'name': 'myrole',
-                    'trust_policy': {'trust': 'policy'},
+                    'trust_policy': Variable('lambda_trust_policy'),
                     'policy': {'iam': 'policy'}},
         )
-        self.assert_apicall_equals(plan[0], expected)
+        self.assert_apicall_equals(plan[4], expected)
         assert list(self.last_plan.messages.values()) == [
             'Creating IAM role: myrole\n'
         ]
@@ -567,7 +567,7 @@ class TestPlanWebsocketAPI(BasePlannerTests):
     def assert_loads_needed_variables(self, plan):
         # Parse arn and store region/account id for future
         # API calls.
-        assert plan[0:3] == [
+        assert plan[0:5] == [
             models.BuiltinFunction(
                 'parse_arn', [Variable('function_name_connect_lambda_arn')],
                 output_var='parsed_lambda_arn',
@@ -578,6 +578,12 @@ class TestPlanWebsocketAPI(BasePlannerTests):
             models.JPSearch('region',
                             input_var='parsed_lambda_arn',
                             output_var='region_name'),
+            models.JPSearch('partition',
+                            input_var='parsed_lambda_arn',
+                            output_var='partition'),
+            models.JPSearch('dns_suffix',
+                            input_var='parsed_lambda_arn',
+                            output_var='dns_suffix'),
         ]
 
     def test_can_plan_websocket_api(self):
@@ -598,7 +604,7 @@ class TestPlanWebsocketAPI(BasePlannerTests):
         )
         plan = self.determine_plan(websocket_api)
         self.assert_loads_needed_variables(plan)
-        assert plan[3:] == [
+        assert plan[5:] == [
             models.APICall(
                 method_name='create_websocket_api',
                 params={'name': 'app-dev-websocket-api'},
@@ -611,11 +617,11 @@ class TestPlanWebsocketAPI(BasePlannerTests):
             models.StoreValue(
                 name='websocket-connect-integration-lambda-path',
                 value=StringFormat(
-                    'arn:aws:apigateway:{region_name}:lambda:path/'
-                    '2015-03-31/functions/arn:aws:lambda:{region_name}:'
-                    '{account_id}:function:%s/'
+                    'arn:{partition}:apigateway:{region_name}:lambda:path/'
+                    '2015-03-31/functions/arn:{partition}:lambda'
+                    ':{region_name}:{account_id}:function:%s/'
                     'invocations' % 'appname-dev-function_name_connect',
-                    ['region_name', 'account_id'],
+                    ['partition', 'region_name', 'account_id'],
                 ),
             ),
             models.APICall(
@@ -631,11 +637,11 @@ class TestPlanWebsocketAPI(BasePlannerTests):
             models.StoreValue(
                 name='websocket-message-integration-lambda-path',
                 value=StringFormat(
-                    'arn:aws:apigateway:{region_name}:lambda:path/'
-                    '2015-03-31/functions/arn:aws:lambda:{region_name}:'
-                    '{account_id}:function:%s/'
+                    'arn:{partition}:apigateway:{region_name}:lambda:path/'
+                    '2015-03-31/functions/arn:{partition}:lambda'
+                    ':{region_name}:{account_id}:function:%s/'
                     'invocations' % 'appname-dev-function_name_message',
-                    ['region_name', 'account_id'],
+                    ['partition', 'region_name', 'account_id'],
                 ),
             ),
             models.APICall(
@@ -651,11 +657,11 @@ class TestPlanWebsocketAPI(BasePlannerTests):
             models.StoreValue(
                 name='websocket-disconnect-integration-lambda-path',
                 value=StringFormat(
-                    'arn:aws:apigateway:{region_name}:lambda:path/'
-                    '2015-03-31/functions/arn:aws:lambda:{region_name}:'
-                    '{account_id}:function:%s/'
+                    'arn:{partition}:apigateway:{region_name}:lambda:path/'
+                    '2015-03-31/functions/arn:{partition}:lambda'
+                    ':{region_name}:{account_id}:function:%s/'
                     'invocations' % 'appname-dev-function_name_disconnect',
-                    ['region_name', 'account_id'],
+                    ['partition', 'region_name', 'account_id'],
                 ),
             ),
             models.APICall(
@@ -711,8 +717,8 @@ class TestPlanWebsocketAPI(BasePlannerTests):
                 name='websocket_api_url',
                 value=StringFormat(
                     'wss://{websocket_api_id}.execute-api.{region_name}'
-                    '.amazonaws.com/%s/' % 'api',
-                    ['websocket_api_id', 'region_name'],
+                    '.{dns_suffix}/%s/' % 'api',
+                    ['websocket_api_id', 'region_name', 'dns_suffix'],
                 ),
             ),
             models.RecordResourceVariable(
@@ -773,7 +779,7 @@ class TestPlanWebsocketAPI(BasePlannerTests):
         }
         plan = self.determine_plan(websocket_api)
         self.assert_loads_needed_variables(plan)
-        assert plan[3:] == [
+        assert plan[5:] == [
             models.StoreValue(
                 name='websocket_api_id',
                 value='my_websocket_api_id',
@@ -801,11 +807,11 @@ class TestPlanWebsocketAPI(BasePlannerTests):
             models.StoreValue(
                 name='websocket-connect-integration-lambda-path',
                 value=StringFormat(
-                    'arn:aws:apigateway:{region_name}:lambda:path/'
-                    '2015-03-31/functions/arn:aws:lambda:{region_name}:'
-                    '{account_id}:function:%s/'
+                    'arn:{partition}:apigateway:{region_name}:lambda:path/'
+                    '2015-03-31/functions/arn:{partition}:lambda'
+                    ':{region_name}:{account_id}:function:%s/'
                     'invocations' % 'appname-dev-function_name_connect',
-                    ['region_name', 'account_id'],
+                    ['partition', 'region_name', 'account_id'],
                 ),
             ),
             models.APICall(
@@ -821,11 +827,11 @@ class TestPlanWebsocketAPI(BasePlannerTests):
             models.StoreValue(
                 name='websocket-message-integration-lambda-path',
                 value=StringFormat(
-                    'arn:aws:apigateway:{region_name}:lambda:path/'
-                    '2015-03-31/functions/arn:aws:lambda:{region_name}:'
-                    '{account_id}:function:%s/'
+                    'arn:{partition}:apigateway:{region_name}:lambda:path/'
+                    '2015-03-31/functions/arn:{partition}:lambda'
+                    ':{region_name}:{account_id}:function:%s/'
                     'invocations' % 'appname-dev-function_name_message',
-                    ['region_name', 'account_id'],
+                    ['partition', 'region_name', 'account_id'],
                 ),
             ),
             models.APICall(
@@ -841,11 +847,11 @@ class TestPlanWebsocketAPI(BasePlannerTests):
             models.StoreValue(
                 name='websocket-disconnect-integration-lambda-path',
                 value=StringFormat(
-                    'arn:aws:apigateway:{region_name}:lambda:path/'
-                    '2015-03-31/functions/arn:aws:lambda:{region_name}:'
-                    '{account_id}:function:%s/'
+                    'arn:{partition}:apigateway:{region_name}:lambda:path/'
+                    '2015-03-31/functions/arn:{partition}:lambda'
+                    ':{region_name}:{account_id}:function:%s/'
                     'invocations' % 'appname-dev-function_name_disconnect',
-                    ['region_name', 'account_id'],
+                    ['partition', 'region_name', 'account_id'],
                 ),
             ),
             models.APICall(
@@ -886,8 +892,8 @@ class TestPlanWebsocketAPI(BasePlannerTests):
                 name='websocket_api_url',
                 value=StringFormat(
                     'wss://{websocket_api_id}.execute-api.{region_name}'
-                    '.amazonaws.com/%s/' % 'api',
-                    ['websocket_api_id', 'region_name'],
+                    '.{dns_suffix}/%s/' % 'api',
+                    ['websocket_api_id', 'region_name', 'dns_suffix'],
                 ),
             ),
             models.RecordResourceVariable(
@@ -932,7 +938,7 @@ class TestPlanRestAPI(BasePlannerTests):
     def assert_loads_needed_variables(self, plan):
         # Parse arn and store region/account id for future
         # API calls.
-        assert plan[0:4] == [
+        assert plan[0:6] == [
             models.BuiltinFunction(
                 'parse_arn', [Variable('function_name_lambda_arn')],
                 output_var='parsed_lambda_arn',
@@ -943,6 +949,12 @@ class TestPlanRestAPI(BasePlannerTests):
             models.JPSearch('region',
                             input_var='parsed_lambda_arn',
                             output_var='region_name'),
+            models.JPSearch('partition',
+                            input_var='parsed_lambda_arn',
+                            output_var='partition'),
+            models.JPSearch('dns_suffix',
+                            input_var='parsed_lambda_arn',
+                            output_var='dns_suffix'),
             # Verify we copy the function arn as needed.
             models.CopyVariable(
                 from_var='function_name_lambda_arn',
@@ -962,7 +974,7 @@ class TestPlanRestAPI(BasePlannerTests):
         plan = self.determine_plan(rest_api)
         self.assert_loads_needed_variables(plan)
 
-        assert plan[4:] == [
+        assert plan[6:] == [
             models.APICall(
                 method_name='import_rest_api',
                 params={'swagger_document': {'swagger': '2.0'},
@@ -1002,8 +1014,8 @@ class TestPlanRestAPI(BasePlannerTests):
                 name='rest_api_url',
                 value=StringFormat(
                     'https://{rest_api_id}.execute-api.{region_name}'
-                    '.amazonaws.com/api/',
-                    ['rest_api_id', 'region_name'],
+                    '.{dns_suffix}/api/',
+                    ['rest_api_id', 'region_name', 'dns_suffix'],
                 ),
             ),
             models.RecordResourceVariable(
@@ -1034,7 +1046,7 @@ class TestPlanRestAPI(BasePlannerTests):
         }
         plan = self.determine_plan(rest_api)
 
-        assert plan[8].params == {
+        assert plan[10].params == {
             'patch_operations': [
                 {'op': 'replace',
                  'path': '/minimumCompressionSize',
@@ -1066,7 +1078,7 @@ class TestPlanRestAPI(BasePlannerTests):
         plan = self.determine_plan(rest_api)
         self.assert_loads_needed_variables(plan)
 
-        assert plan[4:] == [
+        assert plan[6:] == [
             models.StoreValue(name='rest_api_id', value='my_rest_api_id'),
             models.RecordResourceVariable(
                 resource_type='rest_api',
@@ -1119,8 +1131,8 @@ class TestPlanRestAPI(BasePlannerTests):
                 name='rest_api_url',
                 value=StringFormat(
                     'https://{rest_api_id}.execute-api.{region_name}'
-                    '.amazonaws.com/api/',
-                    ['rest_api_id', 'region_name'],
+                    '.{dns_suffix}/api/',
+                    ['rest_api_id', 'region_name', 'dns_suffix'],
                 ),
             ),
             models.RecordResourceVariable(
@@ -1141,7 +1153,7 @@ class TestPlanSNSSubscription(BasePlannerTests):
             lambda_function=function
         )
         plan = self.determine_plan(sns_subscription)
-        plan_parse_arn = plan[:4]
+        plan_parse_arn = plan[:5]
         assert plan_parse_arn == [
             models.BuiltinFunction(
                 function_name='parse_arn',
@@ -1155,16 +1167,20 @@ class TestPlanSNSSubscription(BasePlannerTests):
                 expression='region',
                 input_var='parsed_lambda_arn',
                 output_var='region_name'),
+            models.JPSearch(
+                expression='partition',
+                input_var='parsed_lambda_arn',
+                output_var='partition'),
             models.StoreValue(
                 name='function_name-sns-subscription_topic_arn',
                 value=StringFormat(
-                    "arn:aws:sns:{region_name}:{account_id}:mytopic",
-                    variables=['region_name', 'account_id'],
+                    "arn:{partition}:sns:{region_name}:{account_id}:mytopic",
+                    variables=['partition', 'region_name', 'account_id'],
                 )
             ),
         ]
         topic_arn_var = Variable("function_name-sns-subscription_topic_arn")
-        assert plan[4:] == [
+        assert plan[5:] == [
             models.APICall(
                 method_name='add_permission_for_sns_topic',
                 params={
@@ -1278,7 +1294,7 @@ class TestPlanSNSSubscription(BasePlannerTests):
             subscription_arn='arn:aws:subscribe',
         )
         plan = self.determine_plan(sns_subscription)
-        plan_parse_arn = plan[:4]
+        plan_parse_arn = plan[:5]
         assert plan_parse_arn == [
             models.BuiltinFunction(
                 function_name='parse_arn',
@@ -1292,15 +1308,19 @@ class TestPlanSNSSubscription(BasePlannerTests):
                 expression='region',
                 input_var='parsed_lambda_arn',
                 output_var='region_name'),
+            models.JPSearch(
+                expression='partition',
+                input_var='parsed_lambda_arn',
+                output_var='partition'),
             models.StoreValue(
                 name='function_name-sns-subscription_topic_arn',
                 value=StringFormat(
-                    "arn:aws:sns:{region_name}:{account_id}:mytopic",
-                    variables=['region_name', 'account_id'],
+                    "arn:{partition}:sns:{region_name}:{account_id}:mytopic",
+                    variables=['partition', 'region_name', 'account_id'],
                 )
             ),
         ]
-        assert plan[4:] == [
+        assert plan[5:] == [
             models.RecordResourceValue(
                 resource_type='sns_event',
                 resource_name='function_name-sns-subscription',
@@ -1337,7 +1357,7 @@ class TestPlanSQSSubscription(BasePlannerTests):
             lambda_function=function
         )
         plan = self.determine_plan(sqs_event_source)
-        plan_parse_arn = plan[:4]
+        plan_parse_arn = plan[:5]
         assert plan_parse_arn == [
             models.BuiltinFunction(
                 function_name='parse_arn',
@@ -1354,15 +1374,20 @@ class TestPlanSQSSubscription(BasePlannerTests):
                 input_var='parsed_lambda_arn',
                 output_var='region_name'
             ),
+            models.JPSearch(
+                expression='partition',
+                input_var='parsed_lambda_arn',
+                output_var='partition'
+            ),
             models.StoreValue(
                 name='function_name-sqs-event-source_queue_arn',
                 value=StringFormat(
-                    "arn:aws:sqs:{region_name}:{account_id}:myqueue",
-                    variables=['region_name', 'account_id'],
+                    "arn:{partition}:sqs:{region_name}:{account_id}:myqueue",
+                    variables=['partition', 'region_name', 'account_id'],
                 ),
             )
         ]
-        assert plan[4:] == [
+        assert plan[5:] == [
             models.APICall(
                 method_name='create_sqs_event_source',
                 params={
@@ -1417,7 +1442,7 @@ class TestPlanSQSSubscription(BasePlannerTests):
             event_uuid='my-uuid',
         )
         plan = self.determine_plan(sqs_event_source)
-        plan_parse_arn = plan[:4]
+        plan_parse_arn = plan[:5]
         assert plan_parse_arn == [
             models.BuiltinFunction(
                 function_name='parse_arn',
@@ -1431,15 +1456,20 @@ class TestPlanSQSSubscription(BasePlannerTests):
                 expression='region',
                 input_var='parsed_lambda_arn',
                 output_var='region_name'),
+            models.JPSearch(
+                expression='partition',
+                input_var='parsed_lambda_arn',
+                output_var='partition'
+            ),
             models.StoreValue(
                 name='function_name-sqs-event-source_queue_arn',
                 value=StringFormat(
-                    "arn:aws:sqs:{region_name}:{account_id}:myqueue",
-                    variables=['region_name', 'account_id'],
+                    "arn:{partition}:sqs:{region_name}:{account_id}:myqueue",
+                    variables=['partition', 'region_name', 'account_id'],
                 ),
             )
         ]
-        assert plan[4:] == [
+        assert plan[5:] == [
             models.APICall(
                 method_name='update_sqs_event_source',
                 params={

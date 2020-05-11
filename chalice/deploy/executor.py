@@ -114,9 +114,21 @@ class Executor(BaseExecutor):
             value = resolved_args[0]
             parts = value.split(':')
             result = {
+                'partition': parts[1],
                 'service': parts[2],
                 'region': parts[3],
                 'account_id': parts[4],
+                'dns_suffix': self._client.endpoint_dns_suffix(parts[2],
+                                                               parts[3])
+            }
+            self.variables[instruction.output_var] = result
+        elif instruction.function_name == 'interrogate_profile':
+            region = self._client.region_name
+            result = {
+                'partition': self._client.partition_name,
+                'region': region,
+                'dns_suffix': self._client.endpoint_dns_suffix('apigateway',
+                                                               region)
             }
             self.variables[instruction.output_var] = result
         else:

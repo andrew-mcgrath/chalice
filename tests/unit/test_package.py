@@ -446,7 +446,7 @@ class TestTerraformTemplate(TemplateTestBase):
         assert list(resources['aws_lambda_permission'].values())[0] == {
             'function_name': 'sample_app-dev',
             'action': 'lambda:InvokeFunction',
-            'principal': 'apigateway.amazonaws.com',
+            'principal': 'apigateway.${data.aws_partition.chalice.dns_suffix}',
             'source_arn': (
                 '${aws_api_gateway_rest_api.rest_api.execution_arn}/*')
         }
@@ -459,7 +459,7 @@ class TestTerraformTemplate(TemplateTestBase):
             'Statement': [
                 {
                     'Action': 'execute-api:Invoke',
-                    'Resource': 'arn:aws:execute-api:*:*:*',
+                    'Resource': 'arn:*:execute-api:*:*:*',
                     'Effect': 'Allow',
                     'Condition': {
                         'StringEquals': {
@@ -491,7 +491,7 @@ class TestTerraformTemplate(TemplateTestBase):
         assert resources['aws_lambda_permission']['myauth_invoke'] == {
             'action': 'lambda:InvokeFunction',
             'function_name': 'sample_app-dev-myauth',
-            'principal': 'apigateway.amazonaws.com',
+            'principal': 'apigateway.${data.aws_partition.chalice.dns_suffix}',
             'source_arn': (
                 '${aws_api_gateway_rest_api.rest_api.execution_arn}/*')
         }
@@ -572,8 +572,8 @@ class TestTerraformTemplate(TemplateTestBase):
             'handler-s3event'] == {
                 'action': 'lambda:InvokeFunction',
                 'function_name': 'sample_app-dev-handler',
-                'principal': 's3.amazonaws.com',
-                'source_arn': 'arn:aws:s3:::foo',
+                'principal': 's3.${data.aws_partition.chalice.dns_suffix}',
+                'source_arn': 'arn:*:s3:::foo',
                 'statement_id': 'handler-s3event'
         }
 
@@ -602,7 +602,8 @@ class TestTerraformTemplate(TemplateTestBase):
         assert template['resource']['aws_sns_topic_subscription'][
             'handler-sns-subscription'] == {
                 'topic_arn': (
-                    'arn:aws:sns:${data.aws_region.chalice.name}:'
+                    'arn:${data.aws_partition.chalice.partition}:sns'
+                    ':${data.aws_region.chalice.name}:'
                     '${data.aws_caller_identity.chalice.account_id}:foo'),
                 'protocol': 'lambda',
                 'endpoint': '${aws_lambda_function.handler.arn}'
@@ -632,7 +633,7 @@ class TestTerraformTemplate(TemplateTestBase):
             'handler-sns-subscription'] == {
                 'function_name': 'sample_app-dev-handler',
                 'action': 'lambda:InvokeFunction',
-                'principal': 'sns.amazonaws.com',
+                'principal': 'sns.${data.aws_partition.chalice.dns_suffix}',
                 'source_arn': 'arn:aws:sns:space-leo-1:1234567890:foo'
         }
 
@@ -651,7 +652,8 @@ class TestTerraformTemplate(TemplateTestBase):
             'aws_lambda_event_source_mapping'][
                 'handler-sqs-event-source'] == {
                     'event_source_arn': (
-                        'arn:aws:sqs:${data.aws_region.chalice.name}:'
+                        'arn:${data.aws_partition.chalice.partition}:sqs'
+                        ':${data.aws_region.chalice.name}:'
                         '${data.aws_caller_identity.chalice.account_id}:foo'),
                     'function_name': 'sample_app-dev-handler',
                     'batch_size': 5
@@ -672,7 +674,6 @@ class TestTerraformTemplate(TemplateTestBase):
 
 
 class TestSAMTemplate(TemplateTestBase):
-
     template_gen_factory = package.SAMTemplateGenerator
 
     def test_sam_generates_sam_template_basic(self, sample_app):
@@ -899,11 +900,11 @@ class TestSAMTemplate(TemplateTestBase):
             'Properties': {
                 'Action': 'lambda:InvokeFunction',
                 'FunctionName': {'Ref': 'APIHandler'},
-                'Principal': 'apigateway.amazonaws.com',
+                'Principal': {'Fn::Sub': 'apigateway.${AWS::URLSuffix}'},
                 'SourceArn': {
                     'Fn::Sub': [
-                        ('arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}'
-                         ':${RestAPIId}/*'),
+                        ('arn:${AWS::Partition}:execute-api:${AWS::Region}'
+                         ':${AWS::AccountId}:${RestAPIId}/*'),
                         {'RestAPIId': {'Ref': 'RestAPI'}}]}},
         }
         assert resources['RestAPI']['Type'] == 'AWS::Serverless::Api'
@@ -917,11 +918,11 @@ class TestSAMTemplate(TemplateTestBase):
             'Properties': {
                 'Action': 'lambda:InvokeFunction',
                 'FunctionName': {'Fn::GetAtt': ['Myauth', 'Arn']},
-                'Principal': 'apigateway.amazonaws.com',
+                'Principal': {'Fn::Sub': 'apigateway.${AWS::URLSuffix}'},
                 'SourceArn': {
                     'Fn::Sub': [
-                        ('arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}'
-                         ':${RestAPIId}/*'),
+                        ('arn:${AWS::Partition}:execute-api:${AWS::Region}'
+                         ':${AWS::AccountId}:${RestAPIId}/*'),
                         {'RestAPIId': {'Ref': 'RestAPI'}}]}},
         }
         # Also verify we add the expected outputs when using
@@ -937,7 +938,7 @@ class TestSAMTemplate(TemplateTestBase):
                 'Value': {
                     'Fn::Sub': (
                         'https://${RestAPI}.execute-api.'
-                        '${AWS::Region}.amazonaws.com/api/'
+                        '${AWS::Region}.${AWS::URLSuffix}/api/'
                     )
                 }
             },
@@ -980,8 +981,7 @@ class TestSAMTemplate(TemplateTestBase):
                                ('WebsocketMessage', '$default'),
                                ('WebsocketDisconnect', '$disconnect'),):
             # Lambda function should be created.
-            assert resources[handler][
-                'Type'] == 'AWS::Serverless::Function'
+            assert resources[handler]['Type'] == 'AWS::Serverless::Function'
 
             # Along with permission to invoke from API Gateway.
             assert resources['%sInvokePermission' % handler] == {
@@ -989,11 +989,12 @@ class TestSAMTemplate(TemplateTestBase):
                 'Properties': {
                     'Action': 'lambda:InvokeFunction',
                     'FunctionName': {'Ref': handler},
-                    'Principal': 'apigateway.amazonaws.com',
+                    'Principal': {'Fn::Sub': 'apigateway.${AWS::URLSuffix}'},
                     'SourceArn': {
                         'Fn::Sub': [
                             (
-                                'arn:aws:execute-api:${AWS::Region}:${AWS::'
+                                'arn:${AWS::Partition}:execute-api'
+                                ':${AWS::Region}:${AWS::'
                                 'AccountId}:${WebsocketAPIId}/*'
                             ),
                             {'WebsocketAPIId': {'Ref': 'WebsocketAPI'}}]}},
@@ -1012,10 +1013,11 @@ class TestSAMTemplate(TemplateTestBase):
                     'IntegrationUri': {
                         'Fn::Sub': [
                             (
-                                'arn:aws:apigateway:${AWS::Region}:lambda:path'
-                                '/2015-03-31/functions/arn:aws:lambda:'
-                                '${AWS::Region}:' '${AWS::AccountId}:function:'
-                                '${WebsocketHandler}/invocations'
+                                'arn:${AWS::Partition}:apigateway'
+                                ':${AWS::Region}:lambda:path'
+                                '/2015-03-31/functions/arn:${AWS::Partition}'
+                                ':lambda:${AWS::Region}:${AWS::AccountId}'
+                                ':function:${WebsocketHandler}/invocations'
                             ),
                             {'WebsocketHandler': {'Ref': handler}}
                         ],
@@ -1099,7 +1101,7 @@ class TestSAMTemplate(TemplateTestBase):
                 'Value': {
                     'Fn::Sub': (
                         'wss://${WebsocketAPI}.execute-api.'
-                        '${AWS::Region}.amazonaws.com/api/'
+                        '${AWS::Region}.${AWS::URLSuffix}/api/'
                     )
                 }
             },
@@ -1122,6 +1124,16 @@ class TestSAMTemplate(TemplateTestBase):
             {'PolicyName': 'DefaultRolePolicy',
              'PolicyDocument': {'iam': 'policy'}}
         ]
+        # Verify the trust policy is specific to the region
+        assert cfn_role['Properties']['AssumeRolePolicyDocument'] == {
+            'Statement': [{'Action': 'sts:AssumeRole',
+                           'Effect': 'Allow',
+                           'Principal': {
+                               'Service': {'Fn::Sub':
+                                           'lambda.${AWS::URLSuffix}'}},
+                           'Sid': ''}],
+            'Version': '2012-10-17'}
+
         # Ensure the RoleName is not in the resource properties
         # so we don't require CAPABILITY_NAMED_IAM.
         assert 'RoleName' not in cfn_role['Properties']
@@ -1208,7 +1220,8 @@ class TestSAMTemplate(TemplateTestBase):
                 'Properties': {
                     'Topic': {
                         'Fn::Sub': (
-                            'arn:aws:sns:${AWS::Region}:${AWS::AccountId}:foo'
+                            'arn:${AWS::Partition}:sns:${AWS::Region}'
+                            ':${AWS::AccountId}:foo'
                         )
                     }
                 },
@@ -1252,7 +1265,8 @@ class TestSAMTemplate(TemplateTestBase):
                 'Properties': {
                     'Queue': {
                         'Fn::Sub': (
-                            'arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:foo'
+                            'arn:${AWS::Partition}:sqs:${AWS::Region}'
+                            ':${AWS::AccountId}:foo'
                         )
                     },
                     'BatchSize': 5,
