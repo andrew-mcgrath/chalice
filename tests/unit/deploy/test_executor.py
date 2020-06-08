@@ -16,6 +16,7 @@ from chalice.utils import UI
 class TestExecutor(object):
     def setup_method(self):
         self.mock_client = mock.Mock(spec=TypedAWSClient)
+        self.mock_client.endpoint_dns_suffix.return_value = 'amazonaws.com'
         self.ui = mock.Mock(spec=UI)
         self.executor = Executor(self.mock_client, self.ui)
 
