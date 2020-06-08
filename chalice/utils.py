@@ -18,9 +18,6 @@ from typing import Optional, Union  # noqa
 from typing import MutableMapping  # noqa
 from typing import cast  # noqa
 
-from botocore.loaders import create_loader
-from botocore.regions import EndpointResolver
-
 from chalice.constants import WELCOME_PROMPT
 
 OptInt = Optional[int]
