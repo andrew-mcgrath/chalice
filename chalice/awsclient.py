@@ -667,7 +667,7 @@ class TypedAWSClient(object):
     @property
     def partition_name(self):
         # type: () -> str
-        return self._client('sts').get_caller_identity()['Arn'].split(':')[1]
+        return self._client('apigateway').meta.partition
 
     @property
     def region_name(self):
