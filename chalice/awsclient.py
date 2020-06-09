@@ -26,6 +26,7 @@ import uuid
 
 import botocore.session  # noqa
 from botocore.exceptions import ClientError
+from botocore.loaders import create_loader
 from botocore.vendored.requests import ConnectionError as \
     RequestsConnectionError
 from botocore.vendored.requests.exceptions import ReadTimeout as \
@@ -34,6 +35,7 @@ from typing import Any, Optional, Dict, Callable, List, Iterator, IO  # noqa
 
 from chalice.constants import DEFAULT_STAGE_NAME
 from chalice.constants import MAX_LAMBDA_DEPLOYMENT_SIZE
+from chalice.regions import EndpointResolver
 
 StrMap = Optional[Dict[str, str]]
 OptStr = Optional[str]
@@ -97,6 +99,12 @@ class TypedAWSClient(object):
         self._sleep = sleep
         self._client_cache = {}  # type: Dict[str, Any]
 
+        # establish the endpoint resolver using the botocore loader api
+        # in order to determine partition and endpoint information
+        loader = create_loader('data_loader')
+        endpoints = loader.load_data('endpoints')
+        self._endpoint_resolver = EndpointResolver(endpoints)
+
     def resolve_endpoint(self, service, region):
         # type: (str, str) -> Union[OrderedDict[str, Any], None]
         """Find details of an endpoint based on the service and region.
@@ -104,10 +112,8 @@ class TypedAWSClient(object):
         This utilizes the botocore EndpointResolver in order to find details on
         the given service and region combination.  If the service and region
         combination is not found the None will be returned.
-
         """
-        endpoint_resolver = self._session.get_component('endpoint_resolver')
-        return endpoint_resolver.construct_endpoint(service, region)
+        return self._endpoint_resolver.construct_endpoint(service, region)
 
     def endpoint_from_arn(self, arn):
         # type: (str) -> Union[OrderedDict[str, Any], None]
@@ -117,7 +123,6 @@ class TypedAWSClient(object):
         is a convenience method due to the need to parse multiple ARNs
         throughout the project. If the service and region combination
         is not found the None will be returned.
-
         """
         arn_split = arn.split(':')
         return self.resolve_endpoint(arn_split[2], arn_split[3])
