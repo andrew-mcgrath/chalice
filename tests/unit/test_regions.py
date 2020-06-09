@@ -56,12 +56,11 @@ def endpoints_template():
                     },
                     's3': {
                         'defaults': {
-                            'sslCommonName': \
-                                '{service}.{region}.{dnsSuffix}'
+                            'sslCommonName': '{service}.{region}.{dnsSuffix}'
                         },
                         'endpoints': {
                             'us-foo': {
-                                'sslCommonName': \
+                                'sslCommonName':
                                     '{region}.{service}.{dnsSuffix}'
                             },
                             'us-bar': {},

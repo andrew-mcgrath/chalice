@@ -2,7 +2,6 @@ import os
 import re
 import string
 import sys
-from collections import OrderedDict
 
 import click
 import mock

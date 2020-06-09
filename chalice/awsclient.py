@@ -23,6 +23,7 @@ import shutil
 import json
 import re
 import uuid
+from collections import OrderedDict
 
 import botocore.session  # noqa
 from botocore.exceptions import ClientError
@@ -31,7 +32,8 @@ from botocore.vendored.requests import ConnectionError as \
     RequestsConnectionError
 from botocore.vendored.requests.exceptions import ReadTimeout as \
     RequestsReadTimeout
-from typing import Any, Optional, Dict, Callable, List, Iterator, IO  # noqa
+from typing import Any, Optional, Dict, Callable, List, Iterator, IO, \
+    Union  # noqa
 
 from chalice.constants import DEFAULT_STAGE_NAME
 from chalice.constants import MAX_LAMBDA_DEPLOYMENT_SIZE
