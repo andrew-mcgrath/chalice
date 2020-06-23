@@ -1,15 +1,9 @@
 import re
 
-# Exceptions for Service Principals in us-iso-*
-US_ISO_EXCEPTIONS = {'cloudhsm', 'config', 'states', 'workspaces'}
 
-# Exceptions for Service Principals in us-isob-*
-US_ISOB_EXCEPTIONS = {'dms', 'states'}
-
-
-def service_principal(service, region, url_suffix) -> str:
+def service_principal(service, region, url_suffix):
     # type: (str, str, str) -> str
-    """
+    """Computes a "standard" AWS Service principal for a given set of arguments.
 
     Computes a "standard" AWS Service principal for a given service, region and
     suffix. This is useful for example when you need to compute a service
@@ -17,6 +11,11 @@ def service_principal(service, region, url_suffix) -> str:
     available (so all you have is `{ "Ref": "AWS::Region" }`). This way you get
     the same defaulting behavior that is normally used for built-in data.
 
+    :param service: the name of the service (s3, s3.amazonaws.com, ...)
+    :param region: the region in which the service principal is needed.
+    :param url_suffix: the URL suffix for the partition in which the region is
+    located.
+    :return: The service principal for the given combination of arguments
     """
     matches = re.match(
         (
@@ -38,8 +37,14 @@ def service_principal(service, region, url_suffix) -> str:
     # Simplify the service name down to something like "s3"
     service = matches[1]
 
+    # Exceptions for Service Principals in us-iso-*
+    us_iso_exceptions = {'cloudhsm', 'config', 'states', 'workspaces'}
+
+    # Exceptions for Service Principals in us-isob-*
+    us_isob_exceptions = {'dms', 'states'}
+
     # Account for idiosyncratic Service Principals in `us-iso-*` regions
-    if region.startswith('us-iso-') and service in US_ISO_EXCEPTIONS:
+    if region.startswith('us-iso-') and service in us_iso_exceptions:
         if service == 'states':
             # Services with universal principal
             return '{}.amazonaws.com'.format(service)
@@ -48,7 +53,7 @@ def service_principal(service, region, url_suffix) -> str:
             return '{}.{}'.format(service, url_suffix)
 
     # Account for idiosyncratic Service Principals in `us-isob-*` regions
-    if region.startswith('us-isob-') and service in US_ISOB_EXCEPTIONS:
+    if region.startswith('us-isob-') and service in us_isob_exceptions:
         if service == 'states':
             # Services with universal principal
             return '{}.amazonaws.com'.format(service)
