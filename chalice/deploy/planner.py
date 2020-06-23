@@ -266,16 +266,16 @@ class PlanStage(object):
         if not role_exists:
             return [
                 models.BuiltinFunction(
-                    'interrogate_profile',
-                    [],
-                    output_var='interrogated_profile',
+                    'service_principal',
+                    ['lambda'],
+                    output_var='lambda_service_principal',
                 ),
-                models.JPSearch('dns_suffix',
-                                input_var='interrogated_profile',
-                                output_var='dns_suffix'),
+                models.JPSearch('principal',
+                                input_var='lambda_service_principal',
+                                output_var='lambda_principal'),
                 models.StoreValue(
                     name='lambda_principal',
-                    value=StringFormat('lambda.{dns_suffix}', ['dns_suffix']),
+                    value=StringFormat('{lambda_principal}', ['lambda_principal']),
                 ),
                 models.StoreValue(
                     name='lambda_trust_policy',

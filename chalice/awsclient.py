@@ -13,32 +13,33 @@ As a side benefit, I can also add type annotations to
 this class to get improved type checking across chalice.
 
 """
+import json
 # pylint: disable=too-many-lines
 import os
-import time
-import tempfile
-from datetime import datetime
-import zipfile
-import shutil
-import json
 import re
+import shutil
+import tempfile
+import time
 import uuid
+import zipfile
 from collections import OrderedDict
+from datetime import datetime
+from typing import Any, Optional, Dict, Callable, List, Iterator, Iterable, \
+    IO, Union  # noqa
 
 import botocore.session  # noqa
 from botocore.exceptions import ClientError
 from botocore.loaders import create_loader
+from botocore.utils import datetime2timestamp
 from botocore.vendored.requests import ConnectionError as \
     RequestsConnectionError
 from botocore.vendored.requests.exceptions import ReadTimeout as \
     RequestsReadTimeout
-from botocore.utils import datetime2timestamp
-from typing import Any, Optional, Dict, Callable, List, Iterator, Iterable, \
-    IO, Union # noqa
 from mypy_extensions import TypedDict
 
 from chalice.constants import DEFAULT_STAGE_NAME
 from chalice.constants import MAX_LAMBDA_DEPLOYMENT_SIZE
+from chalice.regioninfo import service_principal
 from chalice.vendored.botocore.regions import EndpointResolver
 
 StrMap = Optional[Dict[str, str]]
@@ -62,7 +63,6 @@ LogEventsResponse = TypedDict(
         'nextToken': str,
     }, total=False
 )
-
 
 _REMOTE_CALL_ERRORS = (
     botocore.exceptions.ClientError, RequestsConnectionError
@@ -97,9 +97,9 @@ class DeploymentPackageTooLargeError(LambdaClientError):
 
 class LambdaErrorContext(object):
     def __init__(self,
-                 function_name,       # type: str
+                 function_name,  # type: str
                  client_method_name,  # type: str
-                 deployment_size,     # type: int
+                 deployment_size,  # type: int
                  ):
         # type: (...) -> None
         self.function_name = function_name
@@ -108,7 +108,6 @@ class LambdaErrorContext(object):
 
 
 class TypedAWSClient(object):
-
     # 30 * 5 == 150 seconds or 2.5 minutes for the initial lambda
     # creation + role propagation.
     LAMBDA_CREATE_ATTEMPTS = 30
@@ -204,18 +203,18 @@ class TypedAWSClient(object):
         return vpc_config
 
     def create_function(self,
-                        function_name,               # type: str
-                        role_arn,                    # type: str
-                        zip_contents,                # type: str
-                        runtime,                     # type: str
-                        handler,                     # type: str
+                        function_name,  # type: str
+                        role_arn,  # type: str
+                        zip_contents,  # type: str
+                        runtime,  # type: str
+                        handler,  # type: str
                         environment_variables=None,  # type: StrMap
-                        tags=None,                   # type: StrMap
-                        timeout=None,                # type: OptInt
-                        memory_size=None,            # type: OptInt
-                        security_group_ids=None,     # type: OptStrList
-                        subnet_ids=None,             # type: OptStrList
-                        layers=None,                 # type: OptStrList
+                        tags=None,  # type: StrMap
+                        timeout=None,  # type: OptInt
+                        memory_size=None,  # type: OptInt
+                        security_group_ids=None,  # type: OptStrList
+                        subnet_ids=None,  # type: OptStrList
+                        layers=None,  # type: OptStrList
                         ):
         # type: (...) -> str
         kwargs = {
@@ -324,17 +323,17 @@ class TypedAWSClient(object):
             raise ResourceDoesNotExistError(function_name)
 
     def update_function(self,
-                        function_name,               # type: str
-                        zip_contents,                # type: str
+                        function_name,  # type: str
+                        zip_contents,  # type: str
                         environment_variables=None,  # type: StrMap
-                        runtime=None,                # type: OptStr
-                        tags=None,                   # type: StrMap
-                        timeout=None,                # type: OptInt
-                        memory_size=None,            # type: OptInt
-                        role_arn=None,               # type: OptStr
-                        subnet_ids=None,             # type: OptStrList
-                        security_group_ids=None,     # type: OptStrList
-                        layers=None,                 # type: OptStrList
+                        runtime=None,  # type: OptStr
+                        tags=None,  # type: StrMap
+                        timeout=None,  # type: OptInt
+                        memory_size=None,  # type: OptInt
+                        role_arn=None,  # type: OptStr
+                        subnet_ids=None,  # type: OptStrList
+                        security_group_ids=None,  # type: OptStrList
+                        layers=None,  # type: OptStrList
                         ):
         # type: (...) -> Dict[str, Any]
         """Update a Lambda function's code and configuration.
@@ -390,14 +389,14 @@ class TypedAWSClient(object):
 
     def _update_function_config(self,
                                 environment_variables,  # type: StrMap
-                                runtime,                # type: OptStr
-                                timeout,                # type: OptInt
-                                memory_size,            # type: OptInt
-                                role_arn,               # type: OptStr
-                                subnet_ids,             # type: OptStrList
-                                security_group_ids,     # type: OptStrList
-                                function_name,          # type: str
-                                layers,                 # type: OptStrList
+                                runtime,  # type: OptStr
+                                timeout,  # type: OptInt
+                                memory_size,  # type: OptInt
+                                role_arn,  # type: OptStr
+                                subnet_ids,  # type: OptStrList
+                                security_group_ids,  # type: OptStrList
+                                function_name,  # type: str
+                                layers,  # type: OptStrList
                                 ):
         # type: (...) -> None
         kwargs = {}  # type: Dict[str, Any]
@@ -704,8 +703,8 @@ class TypedAWSClient(object):
             return (
                 # Splitting on ':' is safe because topic names can't have
                 # a ':' char.
-                attributes['TopicArn'].rsplit(':', 1)[1] == topic_name and
-                attributes['Endpoint'] == function_arn
+                    attributes['TopicArn'].rsplit(':', 1)[1] == topic_name and
+                    attributes['Endpoint'] == function_arn
             )
         except sns_client.exceptions.NotFoundException:
             return False
@@ -731,11 +730,11 @@ class TypedAWSClient(object):
         source_arn = (
             'arn:{partition}:execute-api:'
             '{region_name}:{account_id}:{rest_api_id}/*').format(
-                partition=self.partition_name,
-                region_name=region_name,
-                # Assuming same account id for lambda function and API gateway.
-                account_id=account_id,
-                rest_api_id=rest_api_id)
+            partition=self.partition_name,
+            region_name=region_name,
+            # Assuming same account id for lambda function and API gateway.
+            account_id=account_id,
+            rest_api_id=rest_api_id)
         return source_arn
 
     @property
@@ -784,7 +783,7 @@ class TypedAWSClient(object):
         return datetime.utcfromtimestamp(integer_timestamp / 1000.0)
 
     def filter_log_events(self,
-                          log_group_name,   # type: str
+                          log_group_name,  # type: str
                           start_time=None,  # type: Optional[datetime]
                           next_token=None,  # type: Optional[str]
                           ):
@@ -853,7 +852,9 @@ class TypedAWSClient(object):
             Action='lambda:InvokeFunction',
             FunctionName=function_name,
             StatementId=random_id,
-            Principal='apigateway.%s' % dns_suffix,
+            Principal=service_principal('apigateway',
+                                        self.region_name,
+                                        dns_suffix),
             SourceArn=source_arn,
         )
 
@@ -1016,7 +1017,9 @@ class TypedAWSClient(object):
             Action='lambda:InvokeFunction',
             FunctionName=function_arn,
             StatementId=random_id,
-            Principal='%s.%s' % (service_name, dns_suffix),
+            Principal=service_principal(service_name,
+                                        self.region_name,
+                                        dns_suffix),
             SourceArn=source_arn,
         )
 
@@ -1054,13 +1057,15 @@ class TypedAWSClient(object):
     def _statement_gives_arn_access(self, statement, source_arn, service_name):
         # type: (Dict[str, Any], str, str) -> bool
         dns_suffix = self.endpoint_dns_suffix_from_arn(source_arn)
+        principal = service_principal(service_name,
+                                      self.region_name,
+                                      dns_suffix)
         if not statement['Action'] == 'lambda:InvokeFunction':
             return False
         if statement.get('Condition', {}).get(
                 'ArnLike', {}).get('AWS:SourceArn', '') != source_arn:
             return False
-        if statement.get('Principal', {}).get('Service', '') != \
-                '%s.%s' % (service_name, dns_suffix):
+        if statement.get('Principal', {}).get('Service', '') != principal:
             return False
         # We're not checking the "Resource" key because we're assuming
         # that lambda.get_policy() is returning the policy for the particular
@@ -1237,7 +1242,7 @@ class TypedAWSClient(object):
         # type: (str) -> List[str]
         client = self._client('apigatewayv2')
         return [i['RouteId']
-                for i in client.get_routes(ApiId=api_id,)['Items']]
+                for i in client.get_routes(ApiId=api_id, )['Items']]
 
     def get_websocket_integrations(self, api_id):
         # type: (str) -> List[str]
@@ -1255,12 +1260,12 @@ class TypedAWSClient(object):
         )
 
     def _call_client_method_with_retries(
-        self,
-        method,                 # type: ClientMethod
-        kwargs,                 # type: Dict[str, Any]
-        max_attempts,           # type: int
-        should_retry=None,      # type: Callable[[Exception], bool]
-        delay_time=DELAY_TIME,  # type: int
+            self,
+            method,  # type: ClientMethod
+            kwargs,  # type: Dict[str, Any]
+            max_attempts,  # type: int
+            should_retry=None,  # type: Callable[[Exception], bool]
+            delay_time=DELAY_TIME,  # type: int
     ):
         # type: (...) -> Dict[str, Any]
         client = self._client('lambda')

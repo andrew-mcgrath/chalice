@@ -1,13 +1,14 @@
-import re
 import pprint
+import re
+from typing import Dict, List, Any  # noqa
 
 import jmespath
 from attr import asdict
-from typing import Dict, List, Any  # noqa
 
+from chalice.awsclient import TypedAWSClient  # noqa
 from chalice.deploy import models
 from chalice.deploy.planner import Variable, StringFormat
-from chalice.awsclient import TypedAWSClient  # noqa
+from chalice.regioninfo import service_principal
 from chalice.utils import UI  # noqa
 
 
@@ -131,6 +132,19 @@ class Executor(BaseExecutor):
                                                                region)
             }
             self.variables[instruction.output_var] = result
+        elif instruction.function_name == 'service_principal':
+            resolved_args = self._variable_resolver.resolve_variables(
+                instruction.args, self.variables)
+            service_name = resolved_args[0]
+            region_name = self._client.region_name
+            dns_suffix = self._client.endpoint_dns_suffix(service_name,
+                                                          region_name)
+            result = {
+                'principal': service_principal(service_name,
+                                               region_name,
+                                               dns_suffix)
+            }
+            self.variables[instruction.output_var] = result
         else:
             raise ValueError("Unknown builtin function: %s"
                              % instruction.function_name)
@@ -179,7 +193,6 @@ class VariableResolver(object):
 # The dev commands don't have any backwards compatibility guarantees
 # so we can alter this output as needed.
 class DisplayOnlyExecutor(BaseExecutor):
-
     # Max length of bytes object before we truncate with '<bytes>'
     _MAX_BYTE_LENGTH = 30
     _LINE_VERTICAL = u'\u2502'
@@ -213,7 +226,7 @@ class DisplayOnlyExecutor(BaseExecutor):
                 value = self._format_dict(value, spillover_values)
             line = ('%-30s %s%20s %-10s' % (
                 instruction_name, self._LINE_VERTICAL, '%s:' % key, value)
-            )
+                    )
             self._ui.write(line + '\n')
             instruction_name = ''
         self._ui.write('\n')
