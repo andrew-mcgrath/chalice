@@ -24,9 +24,9 @@ from chalice.deploy.deployer import create_build_stage
 
 
 def create_app_packager(
-        config, package_format='cloudformation',
+        config, options, package_format='cloudformation',
         template_format='json', merge_template=None):
-    # type: (Config, str, str, Optional[str]) -> AppPackager
+    # type: (Config, PackageOptions, str, str, Optional[str]) -> AppPackager
     osutils = OSUtils()
     ui = UI()
     application_builder = ApplicationGraphBuilder()
@@ -54,11 +54,11 @@ def create_app_packager(
                 merger=TemplateDeepMerger(),
                 template_serializer=template_serializer,
                 merge_template=merge_template)])
-        generator = SAMTemplateGenerator(config)
+        generator = SAMTemplateGenerator(config, options)
     else:
         build_stage = create_build_stage(
             osutils, ui, TerraformSwaggerGenerator())
-        generator = TerraformGenerator(config)
+        generator = TerraformGenerator(config, options)
         post_processors.append(
             TerraformCodeLocationPostProcessor(osutils=osutils))
 
@@ -118,9 +118,10 @@ class ResourceBuilder(object):
 class TemplateGenerator(object):
     template_file = None  # type: str
 
-    def __init__(self, config):
-        # type: (Config) -> None
+    def __init__(self, config, options):
+        # type: (Config, PackageOptions) -> None
         self._config = config
+        self._options = options
 
     def dispatch(self, resource, template):
         # type: (models.Model, Dict[str, Any]) -> None
@@ -163,9 +164,9 @@ class SAMTemplateGenerator(TemplateGenerator):
 
     template_file = "sam"
 
-    def __init__(self, config):
-        # type: (Config) -> None
-        super(SAMTemplateGenerator, self).__init__(config)
+    def __init__(self, config, options):
+        # type: (Config, PackageOptions) -> None
+        super(SAMTemplateGenerator, self).__init__(config, options)
         self._seen_names = set([])  # type: Set[str]
 
     def generate(self, resources):

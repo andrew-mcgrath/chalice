@@ -185,11 +185,11 @@ class CLIFactory(object):
         except ValueError:
             raise UnknownConfigFileVersion(string_version)
 
-    def create_app_packager(self, config, package_format, template_format,
-                            merge_template=None):
-        # type: (Config, str, str, OptStr) -> AppPackager
+    def create_app_packager(self, config, options, package_format,
+                            template_format, merge_template=None):
+        # type: (Config, PackageOptions, str, str, OptStr) -> AppPackager
         return create_app_packager(
-            config, package_format, template_format,
+            config, options, package_format, template_format,
             merge_template=merge_template)
 
     def create_log_retriever(self, session, lambda_arn, follow_logs):
@@ -301,7 +301,7 @@ class CLIFactory(object):
 
     def create_package_options(self):
         # type: () -> PackageOptions
-        """Creates the package options that are required to target regions"""
+        """Create the package options that are required to target regions."""
         s = Session(profile=self.profile)
         client = TypedAWSClient(session=s)
         return PackageOptions(client)

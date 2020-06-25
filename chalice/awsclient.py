@@ -175,7 +175,7 @@ class TypedAWSClient(object):
         # type: (str, str, str) -> str
         # Disable too-many-return-statements due to ported code
         # pylint: disable=too-many-return-statements
-        """Computes a "standard" AWS Service principal for given arguments.
+        """Compute a "standard" AWS Service principal for given arguments.
 
         Attribution: This code was ported from https://github.com/aws/aws-cdk
         and more specifically, aws-cdk/region-info/lib/default.ts

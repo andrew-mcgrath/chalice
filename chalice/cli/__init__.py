@@ -540,7 +540,9 @@ def package(ctx, single_file, stage, merge_template,
     factory.profile = profile
     config = factory.create_config_obj(stage)
     options = factory.create_package_options()
-    packager = factory.create_app_packager(config, pkg_format, template_format,
+    packager = factory.create_app_packager(config, options,
+                                           pkg_format,
+                                           template_format,
                                            merge_template)
     if pkg_format == 'terraform' and (merge_template or
                                       single_file or
