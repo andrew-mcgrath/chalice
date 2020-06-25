@@ -24,6 +24,10 @@ def test_unmatched_service():
                              None) == 'taco.magic.food.com'
 
 
+def test_defaults():
+    assert service_principal('lambda') == 'lambda.amazonaws.com'
+
+
 def test_states(region, url_suffix, non_iso_suffixes):
     services = ['states']
     for suffix in non_iso_suffixes:

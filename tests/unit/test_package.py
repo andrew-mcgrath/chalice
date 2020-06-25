@@ -1,15 +1,17 @@
-import os
 import json
-import mock
+import os
 
+import mock
 import pytest
-from chalice.config import Config
+
 from chalice import package
-from chalice.deploy.appgraph import ApplicationGraphBuilder, DependencyBuilder
-from chalice.deploy.deployer import BuildStage
-from chalice.deploy import models
-from chalice.deploy.swagger import SwaggerGenerator
+from chalice.config import Config
 from chalice.constants import LAMBDA_TRUST_POLICY
+from chalice.deploy import models
+from chalice.deploy.appgraph import ApplicationGraphBuilder, DependencyBuilder
+from chalice.awsclient import TypedAWSClient
+from chalice.deploy.deployer import BuildStage
+from chalice.deploy.swagger import SwaggerGenerator
 from chalice.utils import OSUtils
 
 
@@ -80,9 +82,9 @@ def test_terraform_post_processor_moves_files_once():
         'old-dir.zip', os.path.join('outdir', 'deployment.zip'))
     assert mock_osutils.copy.call_count == 1
     assert template['resource']['aws_lambda_function'][
-        'foo']['filename'] == ('./deployment.zip')
+               'foo']['filename'] == ('./deployment.zip')
     assert template['resource']['aws_lambda_function'][
-        'bar']['filename'] == ('./deployment.zip')
+               'bar']['filename'] == ('./deployment.zip')
 
 
 def test_template_generator_default():
@@ -258,7 +260,6 @@ class TestCompositePostProcessor(object):
 
 
 class TemplateTestBase(object):
-
     template_gen_factory = None
 
     def setup_method(self):
@@ -293,8 +294,19 @@ class TemplateTestBase(object):
         )
 
 
-class TestTerraformTemplate(TemplateTestBase):
+class TestPackageOptions(object):
 
+    def test_service_principal(self):
+        with mock.patch('chalice.awsclient.TypedAWSClient.region_name',
+                        new_callable=mock.PropertyMock) as mock_region:
+            mock_region.return_value = 'us-east-1'
+            client = TypedAWSClient(None)
+            options = package.PackageOptions(client)
+            principal = options.service_principal('lambda')
+            assert principal == 'lambda.amazonaws.com'
+
+
+class TestTerraformTemplate(TemplateTestBase):
     template_gen_factory = package.TerraformGenerator
 
     EmptyPolicy = {
@@ -334,7 +346,7 @@ class TestTerraformTemplate(TemplateTestBase):
 
     def get_function(self, template):
         functions = list(template['resource'][
-            'aws_lambda_function'].values())
+                             'aws_lambda_function'].values())
         assert len(functions) == 1
         return functions[0]
 
@@ -348,7 +360,7 @@ class TestTerraformTemplate(TemplateTestBase):
         )
         template = self.template_gen.generate(resources)
         assert template['resource'][
-            'aws_lambda_function']['foo']['role'] == 'role:arn'
+                   'aws_lambda_function']['foo']['role'] == 'role:arn'
 
     def test_adds_env_vars_when_provided(self, sample_app):
         function = self.lambda_function()
@@ -464,16 +476,17 @@ class TestTerraformTemplate(TemplateTestBase):
                     'Condition': {
                         'StringEquals': {
                             'aws:SourceVpce': 'vpce-abc123'
-                            }
-                        },
+                        }
+                    },
                     'Principal': '*'
                 }
             ]
         }
         assert resources['aws_api_gateway_rest_api'][
-            'rest_api']['minimum_compression_size'] == 8192
+                   'rest_api']['minimum_compression_size'] == 8192
         assert resources['aws_api_gateway_rest_api'][
-            'rest_api']['endpoint_configuration'] == {'types': ['PRIVATE']}
+                   'rest_api']['endpoint_configuration'] == {
+                   'types': ['PRIVATE']}
 
         assert 'aws_api_gateway_stage' not in resources
         assert resources['aws_api_gateway_deployment']['rest_api'] == {
@@ -515,14 +528,14 @@ class TestTerraformTemplate(TemplateTestBase):
 
         template = self.generate_template(config, 'dev')
         assert template['resource']['aws_s3_bucket_notification'][
-            'my_data_bucket_notify'] == {
-                'bucket': '${aws_s3_bucket.my_data_bucket.id}',
-                'lambda_function': [{
-                    'events': ['s3:ObjectCreated:*'],
-                    'lambda_function_arn': (
-                        '${aws_lambda_function.handler.arn}')
-                }]
-        }
+                   'my_data_bucket_notify'] == {
+                   'bucket': '${aws_s3_bucket.my_data_bucket.id}',
+                   'lambda_function': [{
+                       'events': ['s3:ObjectCreated:*'],
+                       'lambda_function_arn': (
+                           '${aws_lambda_function.handler.arn}')
+                   }]
+               }
 
     def test_can_generate_chalice_terraform_static_data(self, sample_app):
         config = Config.create(chalice_app=sample_app,
@@ -547,14 +560,14 @@ class TestTerraformTemplate(TemplateTestBase):
 
         template = self.generate_template(config, 'dev')
         assert template['resource']['aws_s3_bucket_notification'][
-            'foo_notify'] == {
-                'bucket': 'foo',
-                'lambda_function': [{
-                    'events': ['s3:ObjectCreated:*'],
-                    'lambda_function_arn': (
-                        '${aws_lambda_function.handler.arn}')
-                }]
-        }
+                   'foo_notify'] == {
+                   'bucket': 'foo',
+                   'lambda_function': [{
+                       'events': ['s3:ObjectCreated:*'],
+                       'lambda_function_arn': (
+                           '${aws_lambda_function.handler.arn}')
+                   }]
+               }
 
     def test_can_package_s3_event_handler(self, sample_app):
         @sample_app.on_s3_event(
@@ -569,25 +582,25 @@ class TestTerraformTemplate(TemplateTestBase):
 
         template = self.generate_template(config, 'dev')
         assert template['resource']['aws_lambda_permission'][
-            'handler-s3event'] == {
-                'action': 'lambda:InvokeFunction',
-                'function_name': 'sample_app-dev-handler',
-                'principal': 's3.${data.aws_partition.chalice.dns_suffix}',
-                'source_arn': 'arn:*:s3:::foo',
-                'statement_id': 'handler-s3event'
-        }
+                   'handler-s3event'] == {
+                   'action': 'lambda:InvokeFunction',
+                   'function_name': 'sample_app-dev-handler',
+                   'principal': 's3.${data.aws_partition.chalice.dns_suffix}',
+                   'source_arn': 'arn:*:s3:::foo',
+                   'statement_id': 'handler-s3event'
+               }
 
         assert template['resource']['aws_s3_bucket_notification'][
-            'foo_notify'] == {
-                'bucket': 'foo',
-                'lambda_function': [{
-                    'events': ['s3:ObjectCreated:*'],
-                    'filter_prefix': 'incoming',
-                    'filter_suffix': '.csv',
-                    'lambda_function_arn': (
-                        '${aws_lambda_function.handler.arn}')
-                }]
-        }
+                   'foo_notify'] == {
+                   'bucket': 'foo',
+                   'lambda_function': [{
+                       'events': ['s3:ObjectCreated:*'],
+                       'filter_prefix': 'incoming',
+                       'filter_suffix': '.csv',
+                       'lambda_function_arn': (
+                           '${aws_lambda_function.handler.arn}')
+                   }]
+               }
 
     def test_can_package_sns_handler(self, sample_app):
         @sample_app.on_sns_message(topic='foo')
@@ -600,14 +613,14 @@ class TestTerraformTemplate(TemplateTestBase):
         template = self.generate_template(config, 'dev')
 
         assert template['resource']['aws_sns_topic_subscription'][
-            'handler-sns-subscription'] == {
-                'topic_arn': (
-                    'arn:${data.aws_partition.chalice.partition}:sns'
-                    ':${data.aws_region.chalice.name}:'
-                    '${data.aws_caller_identity.chalice.account_id}:foo'),
-                'protocol': 'lambda',
-                'endpoint': '${aws_lambda_function.handler.arn}'
-        }
+                   'handler-sns-subscription'] == {
+                   'topic_arn': (
+                       'arn:${data.aws_partition.chalice.partition}:sns'
+                       ':${data.aws_region.chalice.name}:'
+                       '${data.aws_caller_identity.chalice.account_id}:foo'),
+                   'protocol': 'lambda',
+                   'endpoint': '${aws_lambda_function.handler.arn}'
+               }
 
     def test_can_package_sns_arn_handler(self, sample_app):
         arn = 'arn:aws:sns:space-leo-1:1234567890:foo'
@@ -623,19 +636,19 @@ class TestTerraformTemplate(TemplateTestBase):
         template = self.generate_template(config, 'dev')
 
         assert template['resource']['aws_sns_topic_subscription'][
-            'handler-sns-subscription'] == {
-                'topic_arn': arn,
-                'protocol': 'lambda',
-                'endpoint': '${aws_lambda_function.handler.arn}'
-        }
+                   'handler-sns-subscription'] == {
+                   'topic_arn': arn,
+                   'protocol': 'lambda',
+                   'endpoint': '${aws_lambda_function.handler.arn}'
+               }
 
         assert template['resource']['aws_lambda_permission'][
-            'handler-sns-subscription'] == {
-                'function_name': 'sample_app-dev-handler',
-                'action': 'lambda:InvokeFunction',
-                'principal': 'sns.${data.aws_partition.chalice.dns_suffix}',
-                'source_arn': 'arn:aws:sns:space-leo-1:1234567890:foo'
-        }
+                   'handler-sns-subscription'] == {
+                   'function_name': 'sample_app-dev-handler',
+                   'action': 'lambda:InvokeFunction',
+                   'principal': 'sns.${data.aws_partition.chalice.dns_suffix}',
+                   'source_arn': 'arn:aws:sns:space-leo-1:1234567890:foo'
+               }
 
     def test_can_package_sqs_handler(self, sample_app):
         @sample_app.on_sqs_message(queue='foo', batch_size=5)
@@ -649,15 +662,15 @@ class TestTerraformTemplate(TemplateTestBase):
         template = self.generate_template(config, 'dev')
 
         assert template['resource'][
-            'aws_lambda_event_source_mapping'][
-                'handler-sqs-event-source'] == {
-                    'event_source_arn': (
-                        'arn:${data.aws_partition.chalice.partition}:sqs'
-                        ':${data.aws_region.chalice.name}:'
-                        '${data.aws_caller_identity.chalice.account_id}:foo'),
-                    'function_name': 'sample_app-dev-handler',
-                    'batch_size': 5
-        }
+                   'aws_lambda_event_source_mapping'][
+                   'handler-sqs-event-source'] == {
+                   'event_source_arn': (
+                       'arn:${data.aws_partition.chalice.partition}:sqs'
+                       ':${data.aws_region.chalice.name}:'
+                       '${data.aws_caller_identity.chalice.account_id}:foo'),
+                   'function_name': 'sample_app-dev-handler',
+                   'batch_size': 5
+               }
 
     def test_package_websocket_with_error_message(self, sample_websocket_app):
         config = Config.create(chalice_app=sample_websocket_app,
@@ -780,7 +793,7 @@ class TestSAMTemplate(TemplateTestBase):
         assert cfn_resource['Properties']['Layers'] == [
             'arn:aws:layer1',
             'arn:aws:layer2'
-            ]
+        ]
 
     def test_duplicate_resource_name_raises_error(self):
         one = self.lambda_function()
@@ -882,7 +895,7 @@ class TestSAMTemplate(TemplateTestBase):
         template = self.generate_template(config, 'dev')
         resources = template['Resources']
         assert 'MinimumCompressionSize' not in \
-            resources['RestAPI']['Properties']
+               resources['RestAPI']['Properties']
 
     def test_can_generate_rest_api(self, sample_app_with_auth):
         config = Config.create(chalice_app=sample_app_with_auth,
@@ -909,7 +922,7 @@ class TestSAMTemplate(TemplateTestBase):
         }
         assert resources['RestAPI']['Type'] == 'AWS::Serverless::Api'
         assert resources['RestAPI']['Properties']['MinimumCompressionSize'] \
-            == 100
+               == 100
         # We should also create the auth lambda function.
         assert resources['Myauth']['Type'] == 'AWS::Serverless::Function'
         # Along with permission to invoke from API Gateway.
@@ -949,7 +962,7 @@ class TestSAMTemplate(TemplateTestBase):
         ('$default', 'WebsocketMessageRoute'),
         ('$connect', 'WebsocketConnectRoute'),
         ('$disconnect', 'WebsocketDisconnectRoute')]
-    )
+                             )
     def test_generate_partial_websocket_api(
             self, route_key, route, sample_websocket_app):
         # Remove all but one websocket route.
@@ -1082,14 +1095,14 @@ class TestSAMTemplate(TemplateTestBase):
                 }
             },
             'WebsocketConnectHandlerName': {'Value': {'Ref':
-                                                      'WebsocketConnect'}},
+                                                          'WebsocketConnect'}},
             'WebsocketMessageHandlerArn': {
                 'Value': {
                     'Fn::GetAtt': ['WebsocketMessage', 'Arn']
                 }
             },
             'WebsocketMessageHandlerName': {'Value': {'Ref':
-                                                      'WebsocketMessage'}},
+                                                          'WebsocketMessage'}},
             'WebsocketDisconnectHandlerArn': {
                 'Value': {
                     'Fn::GetAtt': ['WebsocketDisconnect', 'Arn']
@@ -1130,7 +1143,7 @@ class TestSAMTemplate(TemplateTestBase):
                            'Effect': 'Allow',
                            'Principal': {
                                'Service': {'Fn::Sub':
-                                           'lambda.${AWS::URLSuffix}'}},
+                                               'lambda.${AWS::URLSuffix}'}},
                            'Sid': ''}],
             'Version': '2012-10-17'}
 

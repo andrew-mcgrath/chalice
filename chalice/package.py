@@ -4,9 +4,9 @@ import copy
 import json
 import os
 import re
-
 from typing import Any, Optional, Dict, List, Set, Union  # noqa
 from typing import cast
+
 import yaml
 from yaml.scanner import ScannerError
 
@@ -16,6 +16,7 @@ from chalice.utils import (
     OSUtils, UI, serialize_to_json, to_cfn_resource_name
 )
 from chalice.config import Config  # noqa
+from chalice.regioninfo import service_principal as lookup_principal
 from chalice.deploy import models
 from chalice.deploy.appgraph import ApplicationGraphBuilder, DependencyBuilder
 from chalice.deploy.deployer import BuildStage  # noqa
@@ -80,11 +81,25 @@ class DuplicateResourceNameError(Exception):
     pass
 
 
+class PackageOptions(object):
+    def __init__(self, client):
+        # type: (TypedAWSClient) -> None
+        self._client = client  # type: TypedAWSClient
+
+    def service_principal(self, service):
+        # type: (str) -> str
+        dns_suffix = self._client.endpoint_dns_suffix(service,
+                                                      self._client.region_name)
+        return lookup_principal(service,
+                                self._client.region_name,
+                                dns_suffix)
+
+
 class ResourceBuilder(object):
     def __init__(self,
                  application_builder,  # type: ApplicationGraphBuilder
-                 deps_builder,         # type: DependencyBuilder
-                 build_stage,          # type: BuildStage
+                 deps_builder,  # type: DependencyBuilder
+                 build_stage,  # type: BuildStage
                  ):
         # type: (...) -> None
         self._application_builder = application_builder
@@ -101,7 +116,6 @@ class ResourceBuilder(object):
 
 
 class TemplateGenerator(object):
-
     template_file = None  # type: str
 
     def __init__(self, config):
@@ -140,7 +154,6 @@ class TemplateGenerator(object):
 
 
 class SAMTemplateGenerator(TemplateGenerator):
-
     _BASE_TEMPLATE = {
         'AWSTemplateFormatVersion': '2010-09-09',
         'Transform': 'AWS::Serverless-2016-10-31',
@@ -339,11 +352,11 @@ class SAMTemplateGenerator(TemplateGenerator):
         outputs['EndpointURL'] = {
             'Value': {
                 'Fn::Sub': (
-                    'https://${RestAPI}.execute-api.${AWS::Region}'
-                    # The api_gateway_stage is filled in when
-                    # the template is built.
-                    '.${AWS::URLSuffix}/%s/'
-                ) % stage_name
+                               'https://${RestAPI}.execute-api.${AWS::Region}'
+                               # The api_gateway_stage is filled in when
+                               # the template is built.
+                               '.${AWS::URLSuffix}/%s/'
+                           ) % stage_name
             }
         }
 
@@ -513,11 +526,11 @@ class SAMTemplateGenerator(TemplateGenerator):
         outputs['WebsocketConnectEndpointURL'] = {
             'Value': {
                 'Fn::Sub': (
-                    'wss://${WebsocketAPI}.execute-api.${AWS::Region}'
-                    # The api_gateway_stage is filled in when
-                    # the template is built.
-                    '.${AWS::URLSuffix}/%s/'
-                ) % stage_name
+                               'wss://${WebsocketAPI}.execute-api.${AWS::Region}'
+                               # The api_gateway_stage is filled in when
+                               # the template is built.
+                               '.${AWS::URLSuffix}/%s/'
+                           ) % stage_name
             }
         }
 
@@ -567,9 +580,9 @@ class SAMTemplateGenerator(TemplateGenerator):
         else:
             topic_arn = {
                 'Fn::Sub': (
-                    'arn:${AWS::Partition}:sns'
-                    ':${AWS::Region}:${AWS::AccountId}:%s' %
-                    resource.topic
+                        'arn:${AWS::Partition}:sns'
+                        ':${AWS::Region}:${AWS::AccountId}:%s' %
+                        resource.topic
                 )
             }
         function_cfn['Properties']['Events'] = {
@@ -594,9 +607,9 @@ class SAMTemplateGenerator(TemplateGenerator):
                 'Properties': {
                     'Queue': {
                         'Fn::Sub': (
-                            'arn:${AWS::Partition}:sqs:${AWS::Region}'
-                            ':${AWS::AccountId}:%s' %
-                            resource.queue
+                                'arn:${AWS::Partition}:sqs:${AWS::Region}'
+                                ':${AWS::AccountId}:%s' %
+                                resource.queue
                         )
                     },
                     'BatchSize': resource.batch_size,
@@ -617,7 +630,6 @@ class SAMTemplateGenerator(TemplateGenerator):
 
 
 class TerraformGenerator(TemplateGenerator):
-
     template_file = "chalice.tf"
 
     def generate(self, resources):
@@ -673,15 +685,15 @@ class TerraformGenerator(TemplateGenerator):
 
         template['resource'].setdefault('aws_iam_role', {})[
             resource.resource_name] = {
-                'name': resource.role_name,
-                'assume_role_policy': json.dumps(resource.trust_policy)
+            'name': resource.role_name,
+            'assume_role_policy': json.dumps(resource.trust_policy)
         }
 
         template['resource'].setdefault('aws_iam_role_policy', {})[
             resource.resource_name] = {
-                'name': resource.resource_name + 'Policy',
-                'policy': json.dumps(resource.policy.document),
-                'role': '${aws_iam_role.%s.id}' % resource.resource_name,
+            'name': resource.resource_name + 'Policy',
+            'policy': json.dumps(resource.policy.document),
+            'role': '${aws_iam_role.%s.id}' % resource.resource_name,
         }
 
     def _generate_websocketapi(self, resource, template):
@@ -719,29 +731,29 @@ class TerraformGenerator(TemplateGenerator):
             bucket_name = resource.bucket
         template['resource'].setdefault(
             'aws_s3_bucket_notification', {}).setdefault(
-                bucket_name + '_notify',
-                {'bucket': resource.bucket}).setdefault(
-                    'lambda_function', []).append(bnotify)
+            bucket_name + '_notify',
+            {'bucket': resource.bucket}).setdefault(
+            'lambda_function', []).append(bnotify)
 
         template['resource'].setdefault('aws_lambda_permission', {})[
             resource.resource_name] = {
-                'statement_id': resource.resource_name,
-                'action': 'lambda:InvokeFunction',
-                'function_name': resource.lambda_function.function_name,
-                'principal': 's3.${data.aws_partition.chalice.dns_suffix}',
-                'source_arn': 'arn:*:s3:::%s' % resource.bucket
+            'statement_id': resource.resource_name,
+            'action': 'lambda:InvokeFunction',
+            'function_name': resource.lambda_function.function_name,
+            'principal': 's3.${data.aws_partition.chalice.dns_suffix}',
+            'source_arn': 'arn:*:s3:::%s' % resource.bucket
         }
 
     def _generate_sqseventsource(self, resource, template):
         # type: (models.SQSEventSource, Dict[str, Any]) -> None
         template['resource'].setdefault('aws_lambda_event_source_mapping', {})[
             resource.resource_name] = {
-                'event_source_arn': self._arnref(
-                    "arn:%(partition)s:sqs:%(region)s"
-                    ":%(account_id)s:%(queue)s",
-                    queue=resource.queue),
-                'batch_size': resource.batch_size,
-                'function_name': resource.lambda_function.function_name,
+            'event_source_arn': self._arnref(
+                "arn:%(partition)s:sqs:%(region)s"
+                ":%(account_id)s:%(queue)s",
+                queue=resource.queue),
+            'batch_size': resource.batch_size,
+            'function_name': resource.lambda_function.function_name,
         }
 
     def _generate_snslambdasubscription(self, resource, template):
@@ -756,16 +768,16 @@ class TerraformGenerator(TemplateGenerator):
 
         template['resource'].setdefault('aws_sns_topic_subscription', {})[
             resource.resource_name] = {
-                'topic_arn': topic_arn,
-                'protocol': 'lambda',
-                'endpoint': self._fref(resource.lambda_function)
+            'topic_arn': topic_arn,
+            'protocol': 'lambda',
+            'endpoint': self._fref(resource.lambda_function)
         }
         template['resource'].setdefault('aws_lambda_permission', {})[
             resource.resource_name] = {
-                'function_name': resource.lambda_function.function_name,
-                'action': 'lambda:InvokeFunction',
-                'principal': 'sns.${data.aws_partition.chalice.dns_suffix}',
-                'source_arn': topic_arn
+            'function_name': resource.lambda_function.function_name,
+            'action': 'lambda:InvokeFunction',
+            'principal': 'sns.${data.aws_partition.chalice.dns_suffix}',
+            'source_arn': topic_arn
         }
 
     def _generate_cloudwatchevent(self, resource, template):
@@ -773,9 +785,9 @@ class TerraformGenerator(TemplateGenerator):
 
         template['resource'].setdefault(
             'aws_cloudwatch_event_rule', {})[
-                resource.resource_name] = {
-                    'name': resource.resource_name,
-                    'event_pattern': resource.event_pattern
+            resource.resource_name] = {
+            'name': resource.resource_name,
+            'event_pattern': resource.event_pattern
         }
         self._cwe_helper(resource, template)
 
@@ -784,10 +796,10 @@ class TerraformGenerator(TemplateGenerator):
 
         template['resource'].setdefault(
             'aws_cloudwatch_event_rule', {})[
-                resource.resource_name] = {
-                    'name': resource.resource_name,
-                    'schedule_expression': resource.schedule_expression,
-                    'description': resource.rule_description,
+            resource.resource_name] = {
+            'name': resource.resource_name,
+            'schedule_expression': resource.schedule_expression,
+            'description': resource.rule_description,
         }
         self._cwe_helper(resource, template)
 
@@ -795,21 +807,21 @@ class TerraformGenerator(TemplateGenerator):
         # type: (models.CloudWatchEventBase, Dict[str, Any]) -> None
         template['resource'].setdefault(
             'aws_cloudwatch_event_target', {})[
-                resource.resource_name] = {
-                    'rule': '${aws_cloudwatch_event_rule.%s.name}' % (
-                        resource.resource_name),
-                    'target_id': resource.resource_name,
-                    'arn': self._fref(resource.lambda_function)
+            resource.resource_name] = {
+            'rule': '${aws_cloudwatch_event_rule.%s.name}' % (
+                resource.resource_name),
+            'target_id': resource.resource_name,
+            'arn': self._fref(resource.lambda_function)
         }
         template['resource'].setdefault(
             'aws_lambda_permission', {})[
-                resource.resource_name] = {
-                    'function_name': resource.lambda_function.function_name,
-                    'action': 'lambda:InvokeFunction',
-                    'principal':
-                        'events.${data.aws_partition.chalice.dns_suffix}',
-                    'source_arn': "${aws_cloudwatch_event_rule.%s.arn}" % (
-                        resource.resource_name)
+            resource.resource_name] = {
+            'function_name': resource.lambda_function.function_name,
+            'action': 'lambda:InvokeFunction',
+            'principal':
+                'events.${data.aws_partition.chalice.dns_suffix}',
+            'source_arn': "${aws_cloudwatch_event_rule.%s.arn}" % (
+                resource.resource_name)
         }
 
     def _generate_lambdafunction(self, resource, template):
@@ -860,84 +872,84 @@ class TerraformGenerator(TemplateGenerator):
         swagger_doc = cast(Dict, resource.swagger_doc)
         template['data'].setdefault(
             'template_file', {}).setdefault(
-                'chalice_api_swagger', {})['template'] = json.dumps(
-                    swagger_doc)
+            'chalice_api_swagger', {})['template'] = json.dumps(
+            swagger_doc)
 
         template['resource'].setdefault('aws_api_gateway_rest_api', {})[
             resource.resource_name] = {
-                'body': '${data.template_file.chalice_api_swagger.rendered}',
-                # Terraform will diff explicitly configured attributes
-                # to the current state of the resource. Attributes configured
-                # via swagger on the REST api need to be duplicated here, else
-                # terraform will set them back to empty.
-                'name': swagger_doc['info']['title'],
-                'binary_media_types': swagger_doc[
-                    'x-amazon-apigateway-binary-media-types'],
-                'endpoint_configuration': {'types': [resource.endpoint_type]}
+            'body': '${data.template_file.chalice_api_swagger.rendered}',
+            # Terraform will diff explicitly configured attributes
+            # to the current state of the resource. Attributes configured
+            # via swagger on the REST api need to be duplicated here, else
+            # terraform will set them back to empty.
+            'name': swagger_doc['info']['title'],
+            'binary_media_types': swagger_doc[
+                'x-amazon-apigateway-binary-media-types'],
+            'endpoint_configuration': {'types': [resource.endpoint_type]}
         }
 
         if 'x-amazon-apigateway-policy' in swagger_doc:
             template['resource'][
                 'aws_api_gateway_rest_api'][
-                    resource.resource_name]['policy'] = json.dumps(
-                        swagger_doc['x-amazon-apigateway-policy'])
+                resource.resource_name]['policy'] = json.dumps(
+                swagger_doc['x-amazon-apigateway-policy'])
         if resource.minimum_compression.isdigit():
             template['resource'][
                 'aws_api_gateway_rest_api'][
-                    resource.resource_name][
-                        'minimum_compression_size'] = int(
-                            resource.minimum_compression)
+                resource.resource_name][
+                'minimum_compression_size'] = int(
+                resource.minimum_compression)
 
         template['resource'].setdefault('aws_api_gateway_deployment', {})[
             resource.resource_name] = {
-                'stage_name': resource.api_gateway_stage,
-                # Ensure that the deployment gets redeployed if we update
-                # the swagger description for the api by using its checksum
-                # in the stage description.
-                'stage_description': (
-                    "${md5(data.template_file.chalice_api_swagger.rendered)}"),
-                'rest_api_id': '${aws_api_gateway_rest_api.%s.id}' % (
-                    resource.resource_name),
-                'lifecycle': {'create_before_destroy': True}
+            'stage_name': resource.api_gateway_stage,
+            # Ensure that the deployment gets redeployed if we update
+            # the swagger description for the api by using its checksum
+            # in the stage description.
+            'stage_description': (
+                "${md5(data.template_file.chalice_api_swagger.rendered)}"),
+            'rest_api_id': '${aws_api_gateway_rest_api.%s.id}' % (
+                resource.resource_name),
+            'lifecycle': {'create_before_destroy': True}
         }
 
         template['resource'].setdefault('aws_lambda_permission', {})[
             resource.resource_name + '_invoke'] = {
-                'function_name': resource.lambda_function.function_name,
-                'action': 'lambda:InvokeFunction',
-                'principal':
-                    'apigateway.${data.aws_partition.chalice.dns_suffix}',
-                'source_arn':
-                    "${aws_api_gateway_rest_api.%s.execution_arn}/*" % (
-                        resource.resource_name)
+            'function_name': resource.lambda_function.function_name,
+            'action': 'lambda:InvokeFunction',
+            'principal':
+                'apigateway.${data.aws_partition.chalice.dns_suffix}',
+            'source_arn':
+                "${aws_api_gateway_rest_api.%s.execution_arn}/*" % (
+                    resource.resource_name)
         }
 
         template.setdefault('output', {})[
             'EndpointURL'] = {
-                'value': '${aws_api_gateway_deployment.%s.invoke_url}' % (
-                    resource.resource_name)
+            'value': '${aws_api_gateway_deployment.%s.invoke_url}' % (
+                resource.resource_name)
         }
 
         for auth in resource.authorizers:
             template['resource']['aws_lambda_permission'][
                 auth.resource_name + '_invoke'] = {
-                    'function_name': auth.function_name,
-                    'action': 'lambda:InvokeFunction',
-                    'principal':
-                        'apigateway.${data.aws_partition.chalice.dns_suffix}',
-                    'source_arn': (
+                'function_name': auth.function_name,
+                'action': 'lambda:InvokeFunction',
+                'principal':
+                    'apigateway.${data.aws_partition.chalice.dns_suffix}',
+                'source_arn': (
                         "${aws_api_gateway_rest_api.%s.execution_arn}" % (
-                            resource.resource_name) + "/*")
+                    resource.resource_name) + "/*")
             }
 
 
 class AppPackager(object):
     def __init__(self,
-                 templater,            # type: TemplateGenerator
-                 resource_builder,     # type: ResourceBuilder
-                 post_processor,       # type: TemplatePostProcessor
+                 templater,  # type: TemplateGenerator
+                 resource_builder,  # type: ResourceBuilder
+                 post_processor,  # type: TemplatePostProcessor
                  template_serializer,  # type: TemplateSerializer
-                 osutils,              # type: OSUtils
+                 osutils,  # type: OSUtils
                  ):
         # type: (...) -> None
         self._templater = templater
@@ -954,13 +966,13 @@ class AppPackager(object):
         # type: (Any) -> str
         return yaml.dump(doc, allow_unicode=True)
 
-    def package_app(self, config, outdir, chalice_stage_name):
-        # type: (Config, str, str) -> None
+    def package_app(self, config, outdir, chalice_stage_name, options):
+        # type: (Config, str, str, PackageOptions) -> None
         # Deployment package
         resources = self._resource_builder.construct_resources(
             config, chalice_stage_name)
 
-        template = self._templater.generate(resources)
+        template = self._templater.generate(resources, options)
         if not self._osutils.directory_exists(outdir):
             self._osutils.makedirs(outdir)
         self._template_post_processor.process(
@@ -1029,8 +1041,8 @@ class TerraformCodeLocationPostProcessor(TemplatePostProcessor):
 
 class TemplateMergePostProcessor(TemplatePostProcessor):
     def __init__(self,
-                 osutils,              # type: OSUtils
-                 merger,               # type: TemplateMerger
+                 osutils,  # type: OSUtils
+                 merger,  # type: TemplateMerger
                  template_serializer,  # type: TemplateSerializer
                  merge_template=None,  # type: Optional[str]
                  ):
@@ -1086,7 +1098,7 @@ class TemplateDeepMerger(TemplateMerger):
     def _merge(self, file_template, chalice_template):
         # type: (Any, Any) -> Any
         if isinstance(file_template, dict) and \
-           isinstance(chalice_template, dict):
+                isinstance(chalice_template, dict):
             return self._merge_dict(file_template, chalice_template)
         return file_template
 
@@ -1099,7 +1111,6 @@ class TemplateDeepMerger(TemplateMerger):
 
 
 class TemplateSerializer(object):
-
     file_extension = ''
 
     def load_template(self, file_contents, filename=''):
@@ -1112,7 +1123,6 @@ class TemplateSerializer(object):
 
 
 class JSONTemplateSerializer(TemplateSerializer):
-
     file_extension = 'json'
 
     def serialize_template(self, contents):
@@ -1129,7 +1139,6 @@ class JSONTemplateSerializer(TemplateSerializer):
 
 
 class YAMLTemplateSerializer(TemplateSerializer):
-
     file_extension = 'yaml'
 
     @classmethod

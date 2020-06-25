@@ -1,9 +1,12 @@
 import re
 
 
-def service_principal(service, region, url_suffix):
+def service_principal(service, region='us-east-1', url_suffix='amazonaws.com'):
     # type: (str, str, str) -> str
     """Computes a "standard" AWS Service principal for a given set of arguments.
+
+    Attribution: This code was ported from https://github.com/aws/aws-cdk and
+    more specifically, aws-cdk/region-info/lib/default.ts
 
     Computes a "standard" AWS Service principal for a given service, region and
     suffix. This is useful for example when you need to compute a service
@@ -35,7 +38,7 @@ def service_principal(service, region, url_suffix):
         return service
 
     # Simplify the service name down to something like "s3"
-    service = matches[1]
+    service_name = matches[1]
 
     # Exceptions for Service Principals in us-iso-*
     us_iso_exceptions = {'cloudhsm', 'config', 'states', 'workspaces'}
@@ -44,28 +47,28 @@ def service_principal(service, region, url_suffix):
     us_isob_exceptions = {'dms', 'states'}
 
     # Account for idiosyncratic Service Principals in `us-iso-*` regions
-    if region.startswith('us-iso-') and service in us_iso_exceptions:
-        if service == 'states':
+    if region.startswith('us-iso-') and service_name in us_iso_exceptions:
+        if service_name == 'states':
             # Services with universal principal
-            return '{}.amazonaws.com'.format(service)
+            return '{}.amazonaws.com'.format(service_name)
         else:
             # Services with a partitional principal
-            return '{}.{}'.format(service, url_suffix)
+            return '{}.{}'.format(service_name, url_suffix)
 
     # Account for idiosyncratic Service Principals in `us-isob-*` regions
-    if region.startswith('us-isob-') and service in us_isob_exceptions:
-        if service == 'states':
+    if region.startswith('us-isob-') and service_name in us_isob_exceptions:
+        if service_name == 'states':
             # Services with universal principal
-            return '{}.amazonaws.com'.format(service)
+            return '{}.amazonaws.com'.format(service_name)
         else:
             # Services with a partitional principal
-            return '{}.{}'.format(service, url_suffix)
+            return '{}.{}'.format(service_name, url_suffix)
 
-    if service in ['codedeploy', 'logs']:
-        return '{}.{}.{}'.format(service, region, url_suffix)
-    elif service == 'states':
-        return '{}.{}.amazonaws.com'.format(service, region)
-    elif service == 'ec2':
-        return '{}.{}'.format(service, url_suffix)
+    if service_name in ['codedeploy', 'logs']:
+        return '{}.{}.{}'.format(service_name, region, url_suffix)
+    elif service_name == 'states':
+        return '{}.{}.amazonaws.com'.format(service_name, region)
+    elif service_name == 'ec2':
+        return '{}.{}'.format(service_name, url_suffix)
     else:
-        return '{}.amazonaws.com'.format(service)
+        return '{}.amazonaws.com'.format(service_name)
