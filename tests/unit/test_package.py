@@ -297,13 +297,19 @@ class TemplateTestBase(object):
 class TestPackageOptions(object):
 
     def test_service_principal(self):
-        with mock.patch('chalice.awsclient.TypedAWSClient.region_name',
-                        new_callable=mock.PropertyMock) as mock_region:
-            mock_region.return_value = 'us-east-1'
-            client = TypedAWSClient(None)
-            options = package.PackageOptions(client)
-            principal = options.service_principal('lambda')
-            assert principal == 'lambda.amazonaws.com'
+        awsclient = mock.Mock(spec=TypedAWSClient)
+        awsclient.region_name = 'us-east-1'
+        awsclient.endpoint_dns_suffix.return_value = 'amazonaws.com'
+        awsclient.service_principal.return_value = 'lambda.amazonaws.com'
+        options = package.PackageOptions(awsclient)
+        principal = options.service_principal('lambda')
+        assert principal == 'lambda.amazonaws.com'
+
+        awsclient.endpoint_dns_suffix.assert_called_once_with('lambda',
+                                                              'us-east-1')
+        awsclient.service_principal.assert_called_once_with('lambda',
+                                                            'us-east-1',
+                                                            'amazonaws.com')
 
 
 class TestTerraformTemplate(TemplateTestBase):

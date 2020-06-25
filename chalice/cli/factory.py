@@ -274,11 +274,11 @@ class CLIFactory(object):
             chalice_app = getattr(app, 'app')
         except SyntaxError as e:
             message = (
-                          'Unable to import your app.py file:\n\n'
-                          'File "%s", line %s\n'
-                          '  %s\n'
-                          'SyntaxError: %s'
-                      ) % (getattr(e, 'filename'), e.lineno, e.text, e.msg)
+                'Unable to import your app.py file:\n\n'
+                'File "%s", line %s\n'
+                '  %s\n'
+                'SyntaxError: %s'
+            ) % (getattr(e, 'filename'), e.lineno, e.text, e.msg)
             raise RuntimeError(message)
         if validate_feature_flags:
             validate.validate_feature_flags(chalice_app)
@@ -302,5 +302,6 @@ class CLIFactory(object):
     def create_package_options(self):
         # type: () -> PackageOptions
         """Creates the package options that are required to target regions"""
-        client = TypedAWSClient(self.create_botocore_session())
+        s = Session(profile=self.profile)
+        client = TypedAWSClient(session=s)
         return PackageOptions(client)

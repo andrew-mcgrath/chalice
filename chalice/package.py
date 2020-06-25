@@ -15,8 +15,8 @@ from chalice.deploy.swagger import (
 from chalice.utils import (
     OSUtils, UI, serialize_to_json, to_cfn_resource_name
 )
+from chalice.awsclient import TypedAWSClient # noqa
 from chalice.config import Config  # noqa
-from chalice.regioninfo import service_principal as lookup_principal
 from chalice.deploy import models
 from chalice.deploy.appgraph import ApplicationGraphBuilder, DependencyBuilder
 from chalice.deploy.deployer import BuildStage  # noqa
@@ -90,9 +90,9 @@ class PackageOptions(object):
         # type: (str) -> str
         dns_suffix = self._client.endpoint_dns_suffix(service,
                                                       self._client.region_name)
-        return lookup_principal(service,
-                                self._client.region_name,
-                                dns_suffix)
+        return self._client.service_principal(service,
+                                              self._client.region_name,
+                                              dns_suffix)
 
 
 class ResourceBuilder(object):
@@ -352,11 +352,11 @@ class SAMTemplateGenerator(TemplateGenerator):
         outputs['EndpointURL'] = {
             'Value': {
                 'Fn::Sub': (
-                               'https://${RestAPI}.execute-api.${AWS::Region}'
-                               # The api_gateway_stage is filled in when
-                               # the template is built.
-                               '.${AWS::URLSuffix}/%s/'
-                           ) % stage_name
+                    'https://${RestAPI}.execute-api.${AWS::Region}'
+                    # The api_gateway_stage is filled in when
+                    # the template is built.
+                    '.${AWS::URLSuffix}/%s/'
+                ) % stage_name
             }
         }
 
@@ -526,11 +526,11 @@ class SAMTemplateGenerator(TemplateGenerator):
         outputs['WebsocketConnectEndpointURL'] = {
             'Value': {
                 'Fn::Sub': (
-                               'wss://${WebsocketAPI}.execute-api.${AWS::Region}'
-                               # The api_gateway_stage is filled in when
-                               # the template is built.
-                               '.${AWS::URLSuffix}/%s/'
-                           ) % stage_name
+                    'wss://${WebsocketAPI}.execute-api.${AWS::Region}'
+                    # The api_gateway_stage is filled in when
+                    # the template is built.
+                    '.${AWS::URLSuffix}/%s/'
+                ) % stage_name
             }
         }
 
@@ -580,9 +580,9 @@ class SAMTemplateGenerator(TemplateGenerator):
         else:
             topic_arn = {
                 'Fn::Sub': (
-                        'arn:${AWS::Partition}:sns'
-                        ':${AWS::Region}:${AWS::AccountId}:%s' %
-                        resource.topic
+                    'arn:${AWS::Partition}:sns'
+                    ':${AWS::Region}:${AWS::AccountId}:%s' %
+                    resource.topic
                 )
             }
         function_cfn['Properties']['Events'] = {
@@ -607,9 +607,9 @@ class SAMTemplateGenerator(TemplateGenerator):
                 'Properties': {
                     'Queue': {
                         'Fn::Sub': (
-                                'arn:${AWS::Partition}:sqs:${AWS::Region}'
-                                ':${AWS::AccountId}:%s' %
-                                resource.queue
+                            'arn:${AWS::Partition}:sqs:${AWS::Region}'
+                            ':${AWS::AccountId}:%s' %
+                            resource.queue
                         )
                     },
                     'BatchSize': resource.batch_size,
@@ -938,8 +938,9 @@ class TerraformGenerator(TemplateGenerator):
                 'principal':
                     'apigateway.${data.aws_partition.chalice.dns_suffix}',
                 'source_arn': (
-                        "${aws_api_gateway_rest_api.%s.execution_arn}" % (
-                    resource.resource_name) + "/*")
+                    "${aws_api_gateway_rest_api.%s.execution_arn}" % (
+                        resource.resource_name) + "/*"
+                )
             }
 
 
@@ -966,13 +967,13 @@ class AppPackager(object):
         # type: (Any) -> str
         return yaml.dump(doc, allow_unicode=True)
 
-    def package_app(self, config, outdir, chalice_stage_name, options):
-        # type: (Config, str, str, PackageOptions) -> None
+    def package_app(self, config, outdir, chalice_stage_name):
+        # type: (Config, str, str) -> None
         # Deployment package
         resources = self._resource_builder.construct_resources(
             config, chalice_stage_name)
 
-        template = self._templater.generate(resources, options)
+        template = self._templater.generate(resources)
         if not self._osutils.directory_exists(outdir):
             self._osutils.makedirs(outdir)
         self._template_post_processor.process(

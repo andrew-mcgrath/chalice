@@ -228,7 +228,7 @@ def test_can_write_swagger_model(runner):
         }
 
 
-def test_can_package_command(runner):
+def test_can_package_command(runner, mock_cli_factory):
     with runner.isolated_filesystem():
         cli.create_new_project_skeleton('testproject')
         os.chdir('testproject')

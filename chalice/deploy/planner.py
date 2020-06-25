@@ -275,7 +275,8 @@ class PlanStage(object):
                                 output_var='lambda_principal'),
                 models.StoreValue(
                     name='lambda_principal',
-                    value=StringFormat('{lambda_principal}', ['lambda_principal']),
+                    value=StringFormat('{lambda_principal}',
+                                       ['lambda_principal']),
                 ),
                 models.StoreValue(
                     name='lambda_trust_policy',

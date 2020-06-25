@@ -8,7 +8,6 @@ from attr import asdict
 from chalice.awsclient import TypedAWSClient  # noqa
 from chalice.deploy import models
 from chalice.deploy.planner import Variable, StringFormat
-from chalice.regioninfo import service_principal
 from chalice.utils import UI  # noqa
 
 
@@ -140,9 +139,9 @@ class Executor(BaseExecutor):
             dns_suffix = self._client.endpoint_dns_suffix(service_name,
                                                           region_name)
             result = {
-                'principal': service_principal(service_name,
-                                               region_name,
-                                               dns_suffix)
+                'principal': self._client.service_principal(service_name,
+                                                            region_name,
+                                                            dns_suffix)
             }
             self.variables[instruction.output_var] = result
         else:
@@ -226,7 +225,7 @@ class DisplayOnlyExecutor(BaseExecutor):
                 value = self._format_dict(value, spillover_values)
             line = ('%-30s %s%20s %-10s' % (
                 instruction_name, self._LINE_VERTICAL, '%s:' % key, value)
-                    )
+            )
             self._ui.write(line + '\n')
             instruction_name = ''
         self._ui.write('\n')

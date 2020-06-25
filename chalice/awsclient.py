@@ -39,7 +39,6 @@ from mypy_extensions import TypedDict
 
 from chalice.constants import DEFAULT_STAGE_NAME
 from chalice.constants import MAX_LAMBDA_DEPLOYMENT_SIZE
-from chalice.regioninfo import service_principal
 from chalice.vendored.botocore.regions import EndpointResolver
 
 StrMap = Optional[Dict[str, str]]
@@ -170,6 +169,83 @@ class TypedAWSClient(object):
         """
         endpoint = self.endpoint_from_arn(arn)
         return endpoint['dnsSuffix'] if endpoint else 'amazonaws.com'
+
+    def service_principal(self, service, region='us-east-1',
+                          url_suffix='amazonaws.com'):
+        # type: (str, str, str) -> str
+        # Disable too-many-return-statements due to ported code
+        # pylint: disable=too-many-return-statements
+        """Computes a "standard" AWS Service principal for given arguments.
+
+        Attribution: This code was ported from https://github.com/aws/aws-cdk
+        and more specifically, aws-cdk/region-info/lib/default.ts
+
+        Computes a "standard" AWS Service principal for a given service, region
+        and suffix. This is useful for example when you need to compute a
+        service principal name, but you do not have a synthesize-time region
+        literal available (so all you have is `{ "Ref": "AWS::Region" }`). This
+        way you get the same defaulting behavior that is normally used for
+        built-in data.
+
+        :param service: the name of the service (s3, s3.amazonaws.com, ...)
+        :param region: the region in which the service principal is needed.
+        :param url_suffix: the URL suffix for the partition in which the region
+        is located.
+        :return: The service principal for the given combination of arguments
+        """
+        matches = re.match(
+            (
+                r'^([^.]+)'
+                r'(?:(?:\.amazonaws\.com(?:\.cn)?)|'
+                r'(?:\.c2s\.ic\.gov)|'
+                r'(?:\.sc2s\.sgov\.gov))?$'
+            ), service)
+
+        if matches is None:
+            #  Return "service" if it does not look like any of the following:
+            #  - s3
+            #  - s3.amazonaws.com
+            #  - s3.amazonaws.com.cn
+            #  - s3.c2s.ic.gov
+            #  - s3.sc2s.sgov.gov
+            return service
+
+        # Simplify the service name down to something like "s3"
+        service_name = matches.group(1)
+
+        # Exceptions for Service Principals in us-iso-*
+        us_iso_exceptions = {'cloudhsm', 'config', 'states', 'workspaces'}
+
+        # Exceptions for Service Principals in us-isob-*
+        us_isob_exceptions = {'dms', 'states'}
+
+        # Account for idiosyncratic Service Principals in `us-iso-*` regions
+        if region.startswith('us-iso-') and service_name in us_iso_exceptions:
+            if service_name == 'states':
+                # Services with universal principal
+                return '{}.amazonaws.com'.format(service_name)
+            else:
+                # Services with a partitional principal
+                return '{}.{}'.format(service_name, url_suffix)
+
+        # Account for idiosyncratic Service Principals in `us-isob-*` regions
+        if region.startswith('us-isob-') and \
+                service_name in us_isob_exceptions:
+            if service_name == 'states':
+                # Services with universal principal
+                return '{}.amazonaws.com'.format(service_name)
+            else:
+                # Services with a partitional principal
+                return '{}.{}'.format(service_name, url_suffix)
+
+        if service_name in ['codedeploy', 'logs']:
+            return '{}.{}.{}'.format(service_name, region, url_suffix)
+        elif service_name == 'states':
+            return '{}.{}.amazonaws.com'.format(service_name, region)
+        elif service_name == 'ec2':
+            return '{}.{}'.format(service_name, url_suffix)
+        else:
+            return '{}.amazonaws.com'.format(service_name)
 
     def lambda_function_exists(self, name):
         # type: (str) -> bool
@@ -703,8 +779,8 @@ class TypedAWSClient(object):
             return (
                 # Splitting on ':' is safe because topic names can't have
                 # a ':' char.
-                    attributes['TopicArn'].rsplit(':', 1)[1] == topic_name and
-                    attributes['Endpoint'] == function_arn
+                attributes['TopicArn'].rsplit(':', 1)[1] == topic_name and
+                attributes['Endpoint'] == function_arn
             )
         except sns_client.exceptions.NotFoundException:
             return False
@@ -852,9 +928,9 @@ class TypedAWSClient(object):
             Action='lambda:InvokeFunction',
             FunctionName=function_name,
             StatementId=random_id,
-            Principal=service_principal('apigateway',
-                                        self.region_name,
-                                        dns_suffix),
+            Principal=self.service_principal('apigateway',
+                                             self.region_name,
+                                             dns_suffix),
             SourceArn=source_arn,
         )
 
@@ -1017,9 +1093,9 @@ class TypedAWSClient(object):
             Action='lambda:InvokeFunction',
             FunctionName=function_arn,
             StatementId=random_id,
-            Principal=service_principal(service_name,
-                                        self.region_name,
-                                        dns_suffix),
+            Principal=self.service_principal(service_name,
+                                             self.region_name,
+                                             dns_suffix),
             SourceArn=source_arn,
         )
 
@@ -1057,9 +1133,9 @@ class TypedAWSClient(object):
     def _statement_gives_arn_access(self, statement, source_arn, service_name):
         # type: (Dict[str, Any], str, str) -> bool
         dns_suffix = self.endpoint_dns_suffix_from_arn(source_arn)
-        principal = service_principal(service_name,
-                                      self.region_name,
-                                      dns_suffix)
+        principal = self.service_principal(service_name,
+                                           self.region_name,
+                                           dns_suffix)
         if not statement['Action'] == 'lambda:InvokeFunction':
             return False
         if statement.get('Condition', {}).get(
