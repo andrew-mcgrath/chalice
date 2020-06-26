@@ -268,13 +268,17 @@ class TestCompositePostProcessor(object):
 class TemplateTestBase(object):
     template_gen_factory = None
 
-    def setup_method(self):
+    def setup_method(self, stubbed_session):
         self.resource_builder = package.ResourceBuilder(
             application_builder=ApplicationGraphBuilder(),
             deps_builder=DependencyBuilder(),
             build_stage=mock.Mock(spec=BuildStage)
         )
-        options = PackageOptions(mock.Mock(spec=TypedAWSClient))
+        client = TypedAWSClient(None)
+        m_client = mock.Mock(wraps=client, spec=TypedAWSClient)
+        type(m_client).region_name = mock.PropertyMock(
+            return_value='us-west-2')
+        options = PackageOptions(m_client)
         self.template_gen = self.template_gen_factory(Config(), options)
 
     def generate_template(self, config, options, chalice_stage_name):
@@ -922,13 +926,14 @@ class TestSAMTemplate(TemplateTestBase):
         assert 'MinimumCompressionSize' not in \
                resources['RestAPI']['Properties']
 
-    def test_can_generate_rest_api(self, sample_app_with_auth):
+    def test_can_generate_rest_api(self, sample_app_with_auth,
+                                   stubbed_session):
         config = Config.create(chalice_app=sample_app_with_auth,
                                project_dir='.',
                                api_gateway_stage='api',
                                minimum_compression_size=100,
                                )
-        options = PackageOptions(mock.Mock(spec=TypedAWSClient))
+        options = PackageOptions(TypedAWSClient(stubbed_session))
         template = self.generate_template(config, options, 'dev')
         resources = template['Resources']
         # Lambda function should be created.
@@ -939,7 +944,7 @@ class TestSAMTemplate(TemplateTestBase):
             'Properties': {
                 'Action': 'lambda:InvokeFunction',
                 'FunctionName': {'Ref': 'APIHandler'},
-                'Principal': {'Fn::Sub': 'apigateway.${AWS::URLSuffix}'},
+                'Principal': 'apigateway.amazonaws.com',
                 'SourceArn': {
                     'Fn::Sub': [
                         ('arn:${AWS::Partition}:execute-api:${AWS::Region}'
@@ -957,7 +962,7 @@ class TestSAMTemplate(TemplateTestBase):
             'Properties': {
                 'Action': 'lambda:InvokeFunction',
                 'FunctionName': {'Fn::GetAtt': ['Myauth', 'Arn']},
-                'Principal': {'Fn::Sub': 'apigateway.${AWS::URLSuffix}'},
+                'Principal': 'apigateway.amazonaws.com',
                 'SourceArn': {
                     'Fn::Sub': [
                         ('arn:${AWS::Partition}:execute-api:${AWS::Region}'
@@ -1008,11 +1013,12 @@ class TestSAMTemplate(TemplateTestBase):
         depends_on = resources['WebsocketAPIDeployment'].pop('DependsOn')
         assert [route] == depends_on
 
-    def test_generate_websocket_api(self, sample_websocket_app):
+    def test_generate_websocket_api(self, sample_websocket_app,
+                                    stubbed_session):
         config = Config.create(chalice_app=sample_websocket_app,
                                project_dir='.',
                                api_gateway_stage='api')
-        options = PackageOptions(mock.Mock(spec=TypedAWSClient))
+        options = PackageOptions(TypedAWSClient(stubbed_session))
         template = self.generate_template(config, options, 'dev')
         resources = template['Resources']
 
@@ -1030,7 +1036,7 @@ class TestSAMTemplate(TemplateTestBase):
                 'Properties': {
                     'Action': 'lambda:InvokeFunction',
                     'FunctionName': {'Ref': handler},
-                    'Principal': {'Fn::Sub': 'apigateway.${AWS::URLSuffix}'},
+                    'Principal': 'apigateway.amazonaws.com',
                     'SourceArn': {
                         'Fn::Sub': [
                             (
@@ -1169,9 +1175,7 @@ class TestSAMTemplate(TemplateTestBase):
         assert cfn_role['Properties']['AssumeRolePolicyDocument'] == {
             'Statement': [{'Action': 'sts:AssumeRole',
                            'Effect': 'Allow',
-                           'Principal': {
-                               'Service': {'Fn::Sub':
-                                           'lambda.${AWS::URLSuffix}'}},
+                           'Principal': {'Service': 'lambda.amazonaws.com'},
                            'Sid': ''}],
             'Version': '2012-10-17'}
 

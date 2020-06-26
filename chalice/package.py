@@ -297,7 +297,7 @@ class SAMTemplateGenerator(TemplateGenerator):
             'Properties': {
                 'FunctionName': {'Ref': 'APIHandler'},
                 'Action': 'lambda:InvokeFunction',
-                'Principal': {'Fn::Sub': 'apigateway.${AWS::URLSuffix}'},
+                'Principal': self._options.service_principal('apigateway'),
                 'SourceArn': {
                     'Fn::Sub': [
                         ('arn:${AWS::Partition}:execute-api:${AWS::Region}'
@@ -314,7 +314,7 @@ class SAMTemplateGenerator(TemplateGenerator):
                 'Properties': {
                     'FunctionName': {'Fn::GetAtt': [auth_cfn_name, 'Arn']},
                     'Action': 'lambda:InvokeFunction',
-                    'Principal': {'Fn::Sub': 'apigateway.${AWS::URLSuffix}'},
+                    'Principal': self._options.service_principal('apigateway'),
                     'SourceArn': {
                         'Fn::Sub': [
                             ('arn:${AWS::Partition}:execute-api'
@@ -394,7 +394,7 @@ class SAMTemplateGenerator(TemplateGenerator):
             'Properties': {
                 'FunctionName': {'Ref': websocket_handler},
                 'Action': 'lambda:InvokeFunction',
-                'Principal': {'Fn::Sub': 'apigateway.${AWS::URLSuffix}'},
+                'Principal': self._options.service_principal('apigateway'),
                 'SourceArn': {
                     'Fn::Sub': [
                         ('arn:${AWS::Partition}:execute-api'
@@ -544,9 +544,8 @@ class SAMTemplateGenerator(TemplateGenerator):
         # type: (models.ManagedIAMRole, Dict[str, Any]) -> None
         role_cfn_name = self._register_cfn_resource_name(
             resource.resource_name)
-        resource.trust_policy['Statement'][0]['Principal']['Service'] = {
-            'Fn::Sub': 'lambda.${AWS::URLSuffix}'
-        }
+        resource.trust_policy['Statement'][0]['Principal']['Service'] = \
+            self._options.service_principal('lambda')
         template['Resources'][role_cfn_name] = {
             'Type': 'AWS::IAM::Role',
             'Properties': {
